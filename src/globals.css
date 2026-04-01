@@ -77,6 +77,8 @@ header h1 span { color: var(--kale); }
 .stat-val {
   font-family: var(--font-playfair), 'Playfair Display', serif;
   font-size: 1.9rem; font-weight: 800; line-height: 1; letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  transition: color 0.35s ease;
 }
 .stat-label {
   font-size: 0.58rem; font-weight: 600; letter-spacing: 0.1em;

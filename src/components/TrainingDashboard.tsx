@@ -45,8 +45,8 @@ import {
 } from "@/lib/picklistEngine";
 
 const SESSION_KEY = "uplimit_dashboard_token";
-const SESSION_TAB_KEY = "uplimit_dashboard_active_tab";
-const SESSION_DATA_KEY = "uplimit_dashboard_processed_data";
+const GGT_DATA_KEY = "ggt_data";
+const GGT_TAB_KEY = "ggt_tab";
 
 /** Multi-select: `null` = all, `[]` = none, `[...]` = subset */
 export type DashboardFilters = {
@@ -109,6 +109,149 @@ function filterDatesForViews(
   if (f.months.length === 0) return [];
   return data.all_dates.filter((d) =>
     f.months!.some((mo) => d.startsWith(mo))
+  );
+}
+
+/** Stats strip — same agent/module semantics as `renderOverview`. */
+function computeFilteredStatsStrip(
+  data: ProcessedDashboardData,
+  f: DashboardFilters
+): {
+  agents: number;
+  completions: number;
+  overallPct: number;
+  overdue: number;
+  lowScores: number;
+} {
+  const agents = filterAgentsList(data, f);
+  const modules = filterModulesForViews(data, f);
+  const today = new Date().toISOString().slice(0, 10);
+  const todayWeek = getWeekStart(today);
+  const scoreMap = data._raw_scores ?? {};
+
+  if (!agents.length || !modules.length) {
+    return {
+      agents: agents.length,
+      completions: 0,
+      overallPct: 0,
+      overdue: 0,
+      lowScores: 0,
+    };
+  }
+
+  let completions = 0;
+  let overdue = 0;
+  let lowScores = 0;
+
+  agents.forEach((a) => {
+    const completed = new Set(Object.keys(data.agent_modules[a] || {}));
+    modules.forEach((mod) => {
+      if (completed.has(mod)) {
+        completions++;
+        const s = scoreMap[a]?.[mod];
+        if (s !== undefined && s < LOW_SCORE_THRESHOLD) lowScores++;
+      } else {
+        const relDate = data.module_dates[mod];
+        if (relDate && getWeekStart(relDate) < todayWeek) overdue++;
+      }
+    });
+  });
+
+  const slots = agents.length * modules.length;
+  const overallPct =
+    slots > 0 ? Math.round((completions / slots) * 100) : 0;
+
+  return {
+    agents: agents.length,
+    completions,
+    overallPct,
+    overdue,
+    lowScores,
+  };
+}
+
+function useAnimatedInt(target: number, duration = 320) {
+  const [display, setDisplay] = useState(target);
+  const displayRef = useRef(display);
+  displayRef.current = display;
+
+  useEffect(() => {
+    if (target === displayRef.current) return;
+    const start = displayRef.current;
+    let raf = 0;
+    let cancelled = false;
+    const t0 = performance.now();
+
+    const step = (now: number) => {
+      if (cancelled) return;
+      const t = Math.min(1, (now - t0) / duration);
+      const eased = 1 - (1 - t) * (1 - t);
+      const next = Math.round(start + (target - start) * eased);
+      setDisplay(next);
+      if (t < 1) raf = requestAnimationFrame(step);
+      else setDisplay(target);
+    };
+
+    raf = requestAnimationFrame(step);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+    };
+  }, [target, duration]);
+
+  return display;
+}
+
+function StatsStripAnimated({
+  stats,
+}: {
+  stats: {
+    agents: number;
+    completions: number;
+    overallPct: number;
+    overdue: number;
+    lowScores: number;
+  };
+}) {
+  const animAgents = useAnimatedInt(stats.agents);
+  const animCompletions = useAnimatedInt(stats.completions);
+  const animPct = useAnimatedInt(stats.overallPct);
+  const animOverdue = useAnimatedInt(stats.overdue);
+  const animLow = useAnimatedInt(stats.lowScores);
+
+  return (
+    <>
+      <div className="stat">
+        <div className="stat-val" style={{ color: "var(--guava)" }}>
+          {animAgents}
+        </div>
+        <div className="stat-label">Agents</div>
+      </div>
+      <div className="stat">
+        <div className="stat-val" style={{ color: "var(--ink)" }}>
+          {animCompletions.toLocaleString()}
+        </div>
+        <div className="stat-label">Completions</div>
+      </div>
+      <div className="stat">
+        <div className="stat-val" style={{ color: "var(--kale)" }}>
+          {animPct}%
+        </div>
+        <div className="stat-label">Overall Coverage</div>
+      </div>
+      <div className="stat">
+        <div className="stat-val" style={{ color: "var(--danger)" }}>
+          {animOverdue.toLocaleString()}
+        </div>
+        <div className="stat-label">Overdue</div>
+      </div>
+      <div className="stat">
+        <div className="stat-val" style={{ color: "var(--warn)" }}>
+          {animLow.toLocaleString()}
+        </div>
+        <div className="stat-label">Low Scores</div>
+      </div>
+    </>
   );
 }
 
@@ -1191,18 +1334,6 @@ const VALID_TAB_IDS: readonly TabId[] = [
   "howto",
 ] as const;
 
-function parseStoredTab(): TabId {
-  try {
-    const s = sessionStorage.getItem(SESSION_TAB_KEY);
-    if (s && (VALID_TAB_IDS as readonly string[]).includes(s)) {
-      return s as TabId;
-    }
-  } catch {
-    /* ignore */
-  }
-  return "overview";
-}
-
 type TooltipState = { text: string; x: number; y: number } | null;
 
 type Props = {
@@ -1228,23 +1359,19 @@ function normalizeLoadedData(raw: unknown): ProcessedDashboardData {
   });
 }
 
-function readCachedProcessedData(): ProcessedDashboardData | null {
-  try {
-    const raw = sessionStorage.getItem(SESSION_DATA_KEY);
-    if (!raw) return null;
-    return normalizeLoadedData(JSON.parse(raw));
-  } catch {
-    return null;
-  }
-}
-
 export function TrainingDashboard({
   readOnly = false,
   initialToken,
 }: Props) {
   const [data, setData] = useState<ProcessedDashboardData | null>(() => {
     if (readOnly || initialToken) return null;
-    return readCachedProcessedData();
+    try {
+      const raw = sessionStorage.getItem(GGT_DATA_KEY);
+      if (!raw) return null;
+      return normalizeLoadedData(JSON.parse(raw));
+    } catch {
+      return null;
+    }
   });
   const [shareToken, setShareToken] = useState<string | null>(null);
   const [remoteLoading, setRemoteLoading] = useState(!!initialToken);
@@ -1260,7 +1387,28 @@ export function TrainingDashboard({
   const [exportOpen, setExportOpen] = useState(false);
   const [exportType, setExportType] = useState<ExportType>("daily");
 
-  const [activeTab, setActiveTab] = useState<TabId>(() => parseStoredTab());
+  const [activeTab, setActiveTab] = useState<TabId>(() => {
+    if (readOnly || initialToken) return "overview";
+    try {
+      if (!sessionStorage.getItem(GGT_DATA_KEY)) return "overview";
+      const s = sessionStorage.getItem(GGT_TAB_KEY);
+      if (s && (VALID_TAB_IDS as readonly string[]).includes(s)) {
+        return s as TabId;
+      }
+    } catch {
+      /* ignore */
+    }
+    return "overview";
+  });
+
+  const switchTab = useCallback((id: TabId) => {
+    setActiveTab(id);
+    try {
+      sessionStorage.setItem(GGT_TAB_KEY, id);
+    } catch {
+      /* ignore */
+    }
+  }, []);
   /** Picklist engine: open/search/selected per filter id */
   const [_pl, setPl] = useState(() => initialPicklistState());
   const [rosterText, setRosterText] = useState("");
@@ -1281,6 +1429,15 @@ export function TrainingDashboard({
       /* ignore */
     }
   }, [readOnly, initialToken]);
+
+  useEffect(() => {
+    if (readOnly || initialToken || !data) return;
+    try {
+      sessionStorage.setItem(GGT_DATA_KEY, JSON.stringify(data));
+    } catch {
+      /* ignore */
+    }
+  }, [readOnly, initialToken, data]);
 
   useEffect(() => {
     if (!initialToken) return;
@@ -1561,47 +1718,8 @@ export function TrainingDashboard({
 
   const stats = useMemo(() => {
     if (!data) return null;
-    const agents = data.agents;
-    const modules = data.modules;
-    let completions = 0;
-    agents.forEach((a) => {
-      completions += Object.keys(data.agent_modules[a] || {}).length;
-    });
-    const slots = agents.length * modules.length;
-    const overallPct =
-      slots > 0 ? Math.round((completions / slots) * 100) : 0;
-
-    const today = new Date().toISOString().slice(0, 10);
-    const todayWeek = getWeekStart(today);
-    let overdue = 0;
-    agents.forEach((a) => {
-      modules.forEach((mod) => {
-        if (data.agent_modules[a]?.[mod]) return;
-        const relDate = data.module_dates[mod];
-        if (!relDate) return;
-        if (getWeekStart(relDate) >= todayWeek) return;
-        overdue++;
-      });
-    });
-
-    const scoreMap = data._raw_scores ?? {};
-    let lowScores = 0;
-    agents.forEach((a) => {
-      modules.forEach((mod) => {
-        if (!data.agent_modules[a]?.[mod]) return;
-        const s = scoreMap[a]?.[mod];
-        if (s !== undefined && s < LOW_SCORE_THRESHOLD) lowScores++;
-      });
-    });
-
-    return {
-      agents: agents.length,
-      completions,
-      overallPct,
-      overdue,
-      lowScores,
-    };
-  }, [data]);
+    return computeFilteredStatsStrip(data, filters);
+  }, [data, filters]);
 
   const overviewPane = useMemo(() => {
     if (!data) {
@@ -2155,40 +2273,7 @@ export function TrainingDashboard({
       </header>
 
       <div className="stats-strip">
-        {stats && (
-          <>
-            <div className="stat">
-              <div className="stat-val" style={{ color: "var(--guava)" }}>
-                {stats.agents}
-              </div>
-              <div className="stat-label">Agents</div>
-            </div>
-            <div className="stat">
-              <div className="stat-val" style={{ color: "var(--ink)" }}>
-                {stats.completions.toLocaleString()}
-              </div>
-              <div className="stat-label">Completions</div>
-            </div>
-            <div className="stat">
-              <div className="stat-val" style={{ color: "var(--kale)" }}>
-                {stats.overallPct}%
-              </div>
-              <div className="stat-label">Overall Coverage</div>
-            </div>
-            <div className="stat">
-              <div className="stat-val" style={{ color: "var(--danger)" }}>
-                {stats.overdue.toLocaleString()}
-              </div>
-              <div className="stat-label">Overdue</div>
-            </div>
-            <div className="stat">
-              <div className="stat-val" style={{ color: "var(--warn)" }}>
-                {stats.lowScores.toLocaleString()}
-              </div>
-              <div className="stat-label">Low Scores</div>
-            </div>
-          </>
-        )}
+        {stats ? <StatsStripAnimated stats={stats} /> : null}
       </div>
 
       <div className="tab-bar">
@@ -2207,10 +2292,10 @@ export function TrainingDashboard({
           <div
             key={id}
             className={`tab${activeTab === id ? " active" : ""}`}
-            onClick={() => setActiveTab(id)}
+            onClick={() => switchTab(id)}
             role="button"
             tabIndex={0}
-            onKeyDown={(e) => e.key === "Enter" && setActiveTab(id)}
+            onKeyDown={(e) => e.key === "Enter" && switchTab(id)}
           >
             {label}
           </div>

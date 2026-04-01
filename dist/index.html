@@ -1,31 +1,24 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <script>
-      (function () {
-        var l = window.location;
-        if (!l.search) return;
-        var params = new URLSearchParams(l.search.slice(1));
-        var p = params.get("p");
-        if (p === null) return;
-        var q = params.get("q");
-        var path =
-          l.pathname.slice(0, 1) +
-          p.replace(/~and~/g, "&") +
-          (q ? "?" + q.replace(/~and~/g, "&") : "") +
-          l.hash;
-        window.history.replaceState(null, "", path);
+      (function(){
+        var redirect = sessionStorage.redirect;
+        delete sessionStorage.redirect;
+        if (redirect && redirect !== location.href) {
+          history.replaceState(null, null, redirect);
+        }
       })();
     </script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Uplimit Training Dashboard</title>
     <link
       href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Playfair+Display:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
-    <script type="module" crossorigin src="/gustie-guide-tracker/assets/index-Yai4Tm1W.js"></script>
-    <link rel="stylesheet" crossorigin href="/gustie-guide-tracker/assets/index-CQAeahEC.css">
+    <script type="module" crossorigin src="/gustie-guide-tracker/assets/index-BwBNyKTp.js"></script>
+    <link rel="stylesheet" crossorigin href="/gustie-guide-tracker/assets/index-CKuKBhNf.css">
   </head>
   <body>
     <div id="root"></div>
