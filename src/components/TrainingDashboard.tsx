@@ -329,13 +329,10 @@ function renderOverview(
   const agents = filterAgentsList(data, f);
   const modules = filterModulesForViews(data, f);
 
-  const today = new Date().toISOString().slice(0, 10);
   const scoreMap = data._raw_scores ?? {};
 
   let totalAssignments = 0;
   let totalCompleted = 0;
-  let totalOverdue = 0;
-  let totalLowScore = 0;
   const allScores: number[] = [];
 
   agents.forEach((a) => {
@@ -347,12 +344,6 @@ function renderOverview(
         const s = scoreMap[a]?.[mod];
         if (s !== undefined) {
           allScores.push(s);
-          if (s < LOW_SCORE_THRESHOLD) totalLowScore++;
-        }
-      } else {
-        const relDate = data.module_dates[mod];
-        if (relDate && getWeekStart(relDate) < getWeekStart(today)) {
-          totalOverdue++;
         }
       }
     });
@@ -391,12 +382,6 @@ function renderOverview(
             {totalIncomplete.toLocaleString()}
           </div>
           <div className="ov-card-label">Incomplete</div>
-        </div>
-        <div className="ov-card">
-          <div className="ov-card-val" style={{ color: "var(--danger)" }}>
-            {totalOverdue.toLocaleString()}
-          </div>
-          <div className="ov-card-label">Overdue</div>
         </div>
         <div className="ov-card">
           <div className="ov-card-val" style={{ color: "var(--warn)" }}>
