@@ -1,0 +1,1496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Uplimit Training Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Playfair+Display:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+/* ── GUSTO BRAND TOKENS ── */
+:root {
+  /* Brand palette */
+  --guava: #F45D48;
+  --guava-dim: rgba(244,93,72,0.10);
+  --guava-mid: rgba(244,93,72,0.18);
+  --kale: #0A8080;
+  --kale-dim: rgba(10,128,128,0.10);
+  --kale-mid: rgba(10,128,128,0.18);
+  /* Background palette */
+  --bg: #F8F5F2;
+  --bg-warm: #FFF2DF;
+  --bg-blush: #FEEFE8;
+  --surface: #ffffff;
+  --surface2: #F8F5F2;
+  --surface3: #FEEFE8;
+  /* Typography */
+  --ink: #222525;
+  --muted: #7a7c7c;
+  --faint: #d3d3d3;
+  --border: #e8e2dc;
+  /* Semantic */
+  --danger: #c0392b;
+  --danger-dim: rgba(192,57,43,0.08);
+  --warn: #c47a1e;
+  --warn-dim: rgba(196,122,30,0.08);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-serif; }
+
+/* ── HEADER ── */
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 32px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  position: sticky; top: 0; z-index: 100;
+}
+.logo { display: flex; align-items: center; gap: 12px; }
+.logo-mark {
+  font-family: 'DM Sans', sans-serif; font-size: 1.4rem; font-weight: 600;
+  color: var(--guava); letter-spacing: -0.04em; line-height: 1;
+}
+.logo-text { display: flex; flex-direction: column; gap: 0; }
+header h1 {
+  font-family: 'DM Sans', sans-serif; font-size: 0.78rem; font-weight: 600;
+  color: var(--ink); letter-spacing: 0;
+}
+header h1 span { color: var(--kale); }
+.header-sub { font-size: 0.6rem; color: var(--muted); font-weight: 400; letter-spacing: 0.04em; text-transform: uppercase; }
+.header-meta { display: flex; align-items: center; gap: 10px; }
+.date-range {
+  font-family: 'DM Mono', monospace; font-size: 0.62rem; color: var(--muted);
+  background: var(--bg); border: 1px solid var(--border);
+  padding: 5px 12px; border-radius: 20px;
+}
+.upload-btn {
+  font-family: 'DM Sans', sans-serif; font-size: 0.7rem; font-weight: 600;
+  background: var(--guava); border: none;
+  color: white; padding: 8px 16px; border-radius: 6px; cursor: pointer;
+  transition: opacity 0.2s;
+}
+.upload-btn:hover { opacity: 0.88; }
+
+/* ── STATS STRIP ── */
+.stats-strip {
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.stat { padding: 18px 24px; border-right: 1px solid var(--border); }
+.stat:last-child { border-right: none; }
+.stat-val {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.9rem; font-weight: 800; line-height: 1; letter-spacing: -0.02em;
+}
+.stat-label {
+  font-size: 0.58rem; font-weight: 600; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--muted); margin-top: 4px;
+}
+
+/* ── TABS ── */
+.tab-bar {
+  display: flex; align-items: center;
+  border-bottom: 1px solid var(--border);
+  padding: 0 32px;
+  background: var(--surface);
+  position: sticky; top: 61px; z-index: 99;
+}
+.tab {
+  padding: 13px 20px; font-size: 0.72rem; font-weight: 600;
+  cursor: pointer; border-bottom: 2px solid transparent;
+  color: var(--muted); transition: color 0.2s, border-color 0.2s;
+  white-space: nowrap;
+}
+.tab.active { color: var(--ink); border-bottom-color: var(--guava); }
+.tab:hover { color: var(--ink); }
+.tab-spacer { flex: 1; }
+
+/* ── FILTER BAR ── */
+.filter-bar {
+  display: flex; align-items: center; gap: 10px; padding: 12px 32px;
+  border-bottom: 1px solid var(--border); flex-wrap: wrap;
+  background: var(--bg);
+}
+.filter-bar label {
+  font-size: 0.62rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.09em; color: var(--muted); white-space: nowrap;
+}
+.filter-bar select, .filter-bar input[type="text"] {
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--ink); font-family: 'DM Mono', monospace; font-size: 0.68rem;
+  padding: 6px 10px; border-radius: 6px; outline: none;
+}
+.filter-bar select:focus, .filter-bar input:focus { border-color: var(--kale); }
+.filter-sep { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }
+
+/* ── CONTENT ── */
+.content { overflow-x: auto; }
+.tab-pane { display: none; }
+.tab-pane.active { display: block; }
+
+/* ── DAILY VIEW ── */
+.daily-wrap { padding: 24px 32px; }
+.month-group { margin-bottom: 36px; }
+.month-label {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.1rem; font-weight: 700; color: var(--ink);
+  margin-bottom: 12px; padding-bottom: 8px;
+  border-bottom: 2px solid var(--guava);
+  display: inline-block;
+}
+.daily-table { width: 100%; border-collapse: collapse; font-size: 0.7rem; }
+.daily-table th {
+  font-family: 'DM Mono', monospace; font-size: 0.56rem; font-weight: 500;
+  letter-spacing: 0.05em; color: var(--muted); padding: 6px 8px;
+  text-align: left; border-bottom: 2px solid var(--border); white-space: nowrap;
+  position: sticky; top: 100px; background: var(--bg); z-index: 10;
+}
+.daily-table th.date-th { text-align: center; min-width: 38px; }
+.daily-table td { padding: 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.daily-table tr:last-child td { border-bottom: none; }
+.daily-table tr:hover td { background: var(--bg-blush); }
+.agent-cell { font-weight: 600; font-size: 0.72rem; white-space: nowrap; color: var(--ink); }
+.day-cell { text-align: center; }
+.day-dot {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 24px; border-radius: 4px; font-family: 'DM Mono', monospace;
+  font-size: 0.6rem; font-weight: 500; cursor: default;
+}
+.day-dot.has-activity {
+  background: var(--kale-dim); color: var(--kale); border: 1px solid rgba(10,128,128,0.25);
+}
+.day-dot.no-activity { color: var(--faint); }
+.day-dot.has-activity:hover { background: var(--kale-mid); }
+.tot-cell {
+  font-family: 'DM Mono', monospace; font-size: 0.66rem;
+  color: var(--muted); text-align: right; white-space: nowrap; padding-right: 4px;
+}
+
+/* ── MODULE VIEW ── */
+.module-wrap { padding: 24px 32px; }
+.module-table { width: 100%; border-collapse: collapse; font-size: 0.68rem; }
+.module-table th {
+  font-family: 'DM Mono', monospace; font-size: 0.56rem; font-weight: 500;
+  letter-spacing: 0.05em; color: var(--muted); padding: 7px 10px;
+  text-align: left; border-bottom: 2px solid var(--border); white-space: nowrap;
+  position: sticky; top: 100px; background: var(--bg); z-index: 10;
+}
+.module-table td { padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.module-table tr:last-child td { border-bottom: none; }
+.module-table tr:hover td { background: var(--bg-blush); }
+.mod-check {
+  display: inline-block; width: 20px; height: 20px; border-radius: 4px;
+  text-align: center; line-height: 20px; font-size: 0.6rem;
+}
+.mod-check.done { background: var(--kale-dim); color: var(--kale); }
+.mod-check.miss { background: var(--surface2); color: var(--faint); }
+.mod-name-cell {
+  font-size: 0.68rem; max-width: 260px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; color: var(--ink);
+}
+.mod-date-cell { font-family: 'DM Mono', monospace; font-size: 0.6rem; color: var(--muted); white-space: nowrap; }
+.mod-pct-cell { text-align: right; }
+.pct-pill {
+  display: inline-block; font-family: 'DM Mono', monospace; font-size: 0.6rem;
+  padding: 2px 8px; border-radius: 20px; font-weight: 500;
+}
+.pct-pill.full { background: var(--kale-dim); color: var(--kale); }
+.pct-pill.high { background: rgba(10,128,128,0.06); color: var(--kale); }
+.pct-pill.mid { background: var(--warn-dim); color: var(--warn); }
+.pct-pill.low { background: var(--danger-dim); color: var(--danger); }
+
+/* ── ROSTER GAP VIEW ── */
+.roster-wrap { padding: 24px 32px; }
+.gap-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 22px 26px; margin-bottom: 16px; max-width: 700px;
+}
+.gap-card h3 {
+  font-family: 'Playfair Display', serif;
+  font-size: 1rem; font-weight: 700; margin-bottom: 6px; color: var(--ink);
+}
+.gap-card p { font-size: 0.72rem; color: var(--muted); line-height: 1.6; }
+.roster-input-area { margin-top: 14px; }
+.roster-input-area textarea {
+  width: 100%; background: var(--bg); border: 1px solid var(--border);
+  color: var(--ink); font-family: 'DM Mono', monospace; font-size: 0.7rem;
+  padding: 10px; border-radius: 6px; resize: vertical; outline: none;
+  min-height: 120px;
+}
+.roster-input-area textarea:focus { border-color: var(--kale); }
+.roster-apply-btn {
+  margin-top: 8px; font-family: 'DM Sans', sans-serif; font-weight: 600; font-size: 0.72rem;
+  background: var(--guava); color: white; border: none;
+  padding: 9px 20px; border-radius: 6px; cursor: pointer;
+  transition: opacity 0.2s;
+}
+.roster-apply-btn:hover { opacity: 0.88; }
+.chip-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+.chip {
+  font-family: 'DM Mono', monospace; font-size: 0.63rem;
+  padding: 4px 11px; border-radius: 20px; white-space: nowrap; font-weight: 500;
+}
+.chip.missing { background: var(--danger-dim); border: 1px solid rgba(192,57,43,0.2); color: var(--danger); }
+.chip.extra { background: var(--warn-dim); border: 1px solid rgba(196,122,30,0.2); color: var(--warn); }
+.chip.inactive { background: var(--surface2); border: 1px solid var(--border); color: var(--muted); }
+.gap-none { font-size: 0.75rem; color: var(--kale); margin-top: 10px; font-weight: 600; }
+
+/* ── TOOLTIP ── */
+.tooltip-box {
+  position: fixed; background: var(--ink); border-radius: 6px;
+  padding: 7px 12px; font-family: 'DM Mono', monospace;
+  font-size: 0.63rem; color: white; pointer-events: none; z-index: 999;
+  max-width: 220px; line-height: 1.5; display: none;
+}
+
+/* ── UPLOAD OVERLAY ── */
+.upload-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(34,37,37,0.6);
+  z-index: 200; align-items: center; justify-content: center;
+}
+.upload-overlay.open { display: flex; }
+.upload-modal {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 30px 34px; width: 480px; max-width: 95vw;
+}
+.upload-modal h2 {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.2rem; font-weight: 700; margin-bottom: 8px; color: var(--ink);
+}
+.upload-modal p { font-size: 0.73rem; color: var(--muted); margin-bottom: 20px; line-height: 1.6; }
+.drop-zone {
+  border: 2px dashed var(--border); border-radius: 8px; padding: 30px;
+  text-align: center; cursor: pointer; transition: border-color 0.2s, background 0.2s;
+  font-size: 0.75rem; color: var(--muted); background: var(--bg);
+}
+.drop-zone:hover, .drop-zone.drag-over { border-color: var(--guava); color: var(--guava); background: var(--bg-blush); }
+.modal-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+.modal-cancel {
+  font-family: 'DM Sans', sans-serif; font-size: 0.72rem; font-weight: 600;
+  background: none; border: 1px solid var(--border); color: var(--muted);
+  padding: 8px 16px; border-radius: 6px; cursor: pointer; transition: all 0.2s;
+}
+.modal-cancel:hover { border-color: var(--ink); color: var(--ink); }
+input[type="file"] { display: none; }
+
+
+/* ── EXPORT BUTTON & MODAL ── */
+.export-btn {
+  font-family: 'DM Sans', sans-serif; font-size: 0.7rem; font-weight: 600;
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--ink); padding: 8px 16px; border-radius: 6px; cursor: pointer;
+  transition: border-color 0.2s, color 0.2s; display: flex; align-items: center; gap: 6px;
+}
+.export-btn:hover { border-color: var(--guava); color: var(--guava); }
+.export-btn svg { flex-shrink: 0; }
+
+.export-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(34,37,37,0.55);
+  z-index: 200; align-items: center; justify-content: center;
+}
+.export-overlay.open { display: flex; }
+.export-modal {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 30px 34px; width: 500px; max-width: 95vw;
+}
+.export-modal h2 {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.2rem; font-weight: 700; margin-bottom: 6px; color: var(--ink);
+}
+.export-modal .export-intro {
+  font-size: 0.73rem; color: var(--muted); margin-bottom: 22px; line-height: 1.6;
+}
+.export-options { display: flex; flex-direction: column; gap: 10px; margin-bottom: 22px; }
+.export-option {
+  border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px;
+  cursor: pointer; transition: border-color 0.2s, background 0.2s;
+  display: flex; align-items: flex-start; gap: 12px;
+}
+.export-option:hover { border-color: var(--guava); background: var(--bg-blush); }
+.export-option.selected { border-color: var(--guava); background: var(--bg-blush); }
+.export-option input[type="radio"] { margin-top: 2px; accent-color: var(--guava); flex-shrink: 0; }
+.export-option-label { font-size: 0.78rem; font-weight: 600; color: var(--ink); }
+.export-option-desc { font-size: 0.67rem; color: var(--muted); margin-top: 2px; line-height: 1.5; }
+.export-scope {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+  padding: 12px 14px; margin-bottom: 22px;
+}
+.export-scope label { font-size: 0.62rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.09em; color: var(--muted); display: block; margin-bottom: 8px; }
+.scope-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.scope-chip {
+  font-family: 'DM Sans', sans-serif; font-size: 0.68rem; font-weight: 500;
+  background: var(--surface); border: 1px solid var(--border); color: var(--muted);
+  padding: 4px 12px; border-radius: 20px; cursor: pointer; transition: all 0.15s;
+}
+.scope-chip.active { background: var(--guava); border-color: var(--guava); color: white; }
+.export-footer { display: flex; justify-content: flex-end; align-items: center; gap: 10px; }
+.export-confirm-btn {
+  font-family: 'DM Sans', sans-serif; font-size: 0.75rem; font-weight: 600;
+  background: var(--guava); color: white; border: none;
+  padding: 10px 22px; border-radius: 6px; cursor: pointer; transition: opacity 0.2s;
+  display: flex; align-items: center; gap: 6px;
+}
+.export-confirm-btn:hover { opacity: 0.88; }
+.export-cancel-btn {
+  font-family: 'DM Sans', sans-serif; font-size: 0.72rem; font-weight: 600;
+  background: none; border: 1px solid var(--border); color: var(--muted);
+  padding: 10px 18px; border-radius: 6px; cursor: pointer; transition: all 0.2s;
+}
+.export-cancel-btn:hover { border-color: var(--ink); color: var(--ink); }
+.export-filename {
+  font-family: 'DM Mono', monospace; font-size: 0.62rem; color: var(--muted);
+  flex: 1; text-align: left;
+}
+
+
+/* ── SETUP SCREEN ── */
+.setup-overlay {
+  position: fixed; inset: 0; background: var(--bg);
+  z-index: 300; display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+}
+.setup-overlay.hidden { display: none; }
+.setup-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 16px; padding: 40px 44px; width: 560px; max-width: 100%;
+}
+.setup-logo { font-family: 'DM Sans', sans-serif; font-size: 1.8rem; font-weight: 600; color: var(--guava); margin-bottom: 6px; }
+.setup-card h2 {
+  font-family: 'Playfair Display', serif; font-size: 1.6rem; font-weight: 700;
+  color: var(--ink); margin-bottom: 8px; line-height: 1.2;
+}
+.setup-card .setup-intro { font-size: 0.8rem; color: var(--muted); margin-bottom: 28px; line-height: 1.6; }
+.setup-section { margin-bottom: 22px; }
+.setup-section label {
+  display: block; font-size: 0.62rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.1em; color: var(--muted); margin-bottom: 7px;
+}
+.setup-section input[type="text"] {
+  width: 100%; background: var(--bg); border: 1px solid var(--border);
+  color: var(--ink); font-family: 'DM Sans', sans-serif; font-size: 0.85rem;
+  padding: 10px 14px; border-radius: 8px; outline: none;
+}
+.setup-section input[type="text"]:focus { border-color: var(--kale); }
+.setup-section input[type="text"]::placeholder { color: var(--muted); }
+.setup-drop {
+  border: 2px dashed var(--border); border-radius: 8px; padding: 22px;
+  text-align: center; cursor: pointer; transition: all 0.2s;
+  background: var(--bg);
+}
+.setup-drop:hover, .setup-drop.drag-over { border-color: var(--guava); background: var(--bg-blush); }
+.setup-drop-label { font-size: 0.78rem; color: var(--muted); }
+.setup-drop-label strong { color: var(--guava); }
+.setup-drop-sub { font-size: 0.65rem; color: var(--muted); margin-top: 4px; font-family: 'DM Mono', monospace; }
+.setup-file-loaded { font-size: 0.7rem; color: var(--kale); margin-top: 6px; font-family: 'DM Mono', monospace; }
+.setup-divider { display: flex; align-items: center; gap: 12px; margin: 18px 0; }
+.setup-divider span { font-size: 0.65rem; color: var(--muted); white-space: nowrap; }
+.setup-divider::before, .setup-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+.setup-hint { font-size: 0.68rem; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+.setup-hint code { font-family: 'DM Mono', monospace; background: var(--bg); padding: 1px 5px; border-radius: 3px; font-size: 0.62rem; border: 1px solid var(--border); }
+.setup-footer { margin-top: 28px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.setup-start-btn {
+  font-family: 'DM Sans', sans-serif; font-weight: 700; font-size: 0.85rem;
+  background: var(--guava); color: white; border: none;
+  padding: 12px 28px; border-radius: 8px; cursor: pointer; transition: opacity 0.2s;
+}
+.setup-start-btn:hover { opacity: 0.88; }
+.setup-start-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.setup-skip { font-size: 0.7rem; color: var(--muted); cursor: pointer; text-decoration: underline; }
+.setup-step { font-size: 0.65rem; color: var(--muted); }
+.setup-roster-section { margin-top: 18px; }
+.roster-file-loaded { font-size: 0.7rem; color: var(--kale); margin-top: 4px; font-family: 'DM Mono', monospace; }
+
+
+/* ── OVERVIEW TAB ── */
+.overview-wrap { padding: 24px 32px; }
+.overview-grid { display: grid; grid-template-columns: repeat(5,1fr); gap: 12px; margin-bottom: 28px; }
+.ov-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; }
+.ov-card-val { font-family: 'Playfair Display', serif; font-size: 2rem; font-weight: 800; line-height: 1; letter-spacing: -0.02em; }
+.ov-card-label { font-size: 0.6rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-top: 5px; }
+.ov-section-title { font-family: 'Playfair Display', serif; font-size: 1.1rem; font-weight: 700; color: var(--ink); margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid var(--guava); display: inline-block; }
+.ov-table { width: 100%; border-collapse: collapse; font-size: 0.72rem; margin-bottom: 32px; }
+.ov-table th { font-family: 'DM Mono', monospace; font-size: 0.58rem; font-weight: 500; letter-spacing: 0.06em; color: var(--muted); padding: 7px 10px; text-align: left; border-bottom: 2px solid var(--border); white-space: nowrap; background: var(--bg); }
+.ov-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.ov-table tr:hover td { background: var(--bg-blush); }
+.ov-table tr:last-child td { border-bottom: none; }
+.prog-bar-wrap { display: flex; align-items: center; gap: 8px; }
+.prog-bar { height: 6px; background: var(--surface2); border-radius: 3px; flex: 1; min-width: 60px; }
+.prog-fill { height: 100%; border-radius: 3px; }
+.prog-fill.full { background: var(--kale); }
+.prog-fill.high { background: #4ade80; }
+.prog-fill.mid { background: var(--warn); }
+.prog-fill.low { background: var(--danger); }
+.prog-pct { font-family: 'DM Mono', monospace; font-size: 0.65rem; color: var(--muted); white-space: nowrap; }
+.score-pill { display: inline-block; font-family: 'DM Mono', monospace; font-size: 0.62rem; padding: 2px 8px; border-radius: 20px; font-weight: 500; }
+.score-pill.pass { background: var(--kale-dim); color: var(--kale); }
+.score-pill.warn { background: var(--warn-dim); color: var(--warn); }
+.score-pill.fail { background: var(--danger-dim); color: var(--danger); }
+.score-pill.na { background: var(--surface2); color: var(--muted); }
+.status-badge { display: inline-block; font-size: 0.62rem; font-weight: 600; padding: 3px 9px; border-radius: 20px; white-space: nowrap; }
+.status-badge.complete { background: var(--kale-dim); color: var(--kale); }
+.status-badge.overdue { background: var(--danger-dim); color: var(--danger); }
+.status-badge.low-score { background: var(--warn-dim); color: var(--warn); }
+.status-badge.in-progress { background: var(--guava-dim); color: var(--guava); }
+.urgency-days { font-family: 'DM Mono', monospace; font-size: 0.68rem; font-weight: 600; color: var(--danger); }
+.section-block { margin-bottom: 36px; }
+
+/* ── AGENT SUMMARY TAB ── */
+.agent-wrap { padding: 24px 32px; }
+.agent-table { width: 100%; border-collapse: collapse; font-size: 0.72rem; }
+.agent-table th { font-family: 'DM Mono', monospace; font-size: 0.58rem; font-weight: 500; letter-spacing: 0.06em; color: var(--muted); padding: 7px 10px; text-align: left; border-bottom: 2px solid var(--border); white-space: nowrap; background: var(--bg); position: sticky; top: 100px; z-index: 10; }
+.agent-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.agent-table tr:hover td { background: var(--bg-blush); }
+.agent-table tr:last-child td { border-bottom: none; }
+.agent-name-cell { font-weight: 600; font-size: 0.73rem; }
+.days-badge { font-family: 'DM Mono', monospace; font-size: 0.65rem; color: var(--muted); }
+.days-badge.stale { color: var(--danger); font-weight: 600; }
+
+/* ── MISC ── */
+.no-data { padding: 60px 32px; text-align: center; color: var(--muted); font-size: 0.8rem; }
+.sticky-agent { position: sticky; left: 0; background: var(--bg); z-index: 5; }
+.daily-table tr:hover .sticky-agent { background: var(--bg-blush); }
+.module-table tr:hover .sticky-agent { background: var(--bg-blush); }
+</style>
+</head>
+<body>
+
+<div class="tooltip-box" id="tooltip"></div>
+<div class="upload-overlay" id="uploadOverlay">
+  <div class="upload-modal">
+    <h2>Load New Report</h2>
+    <p>Upload one or two Uplimit CSV exports. Multiple files are combined automatically. The dashboard will refresh instantly.</p>
+    <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+      📂 Click to choose files, or drag &amp; drop CSVs here
+    </div>
+    <input type="file" id="fileInput" accept=".csv" multiple onchange="handleFileUpload(event)"/>
+    <div class="modal-footer">
+      <button class="modal-cancel" onclick="closeUpload()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<header>
+  <div class="logo">
+    <div class="logo-mark">gusto</div>
+    <div class="logo-text">
+      <h1 id="programTitle">Training <span>Dashboard</span></h1>
+      <div class="header-sub" id="programSubtitle">Gustie Guide Completion Tracker</div>
+    </div>
+  </div>
+  <div class="header-meta">
+    <div class="date-range" id="dateRange">Nov 3, 2025 → Mar 24, 2026</div>
+    <button class="upload-btn" onclick="openUpload()">Load New Report</button>
+  </div>
+</header>
+
+<div class="stats-strip" id="statsStrip"></div>
+
+<div class="tab-bar">
+  <div class="tab active" onclick="switchTab('overview',this)">📊 Overview</div>
+  <div class="tab" onclick="switchTab('daily',this)">📅 Day-over-Day</div>
+  <div class="tab" onclick="switchTab('modules',this)">📚 By Module</div>
+  <div class="tab" onclick="switchTab('agents',this)">👤 Agent Summary</div>
+  <div class="tab" onclick="switchTab('overdue',this)">🔴 Overdue</div>
+  <div class="tab" onclick="switchTab('lowscore',this)">🟡 Low Scores</div>
+  <div class="tab" onclick="switchTab('roster',this)">👥 Roster Gaps</div>
+  <div class="tab-spacer"></div>
+  <button class="export-btn" onclick="openExport()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Export CSV</button>
+</div>
+
+<div class="filter-bar">
+  <label>Agent</label>
+  <select id="agentFilter" onchange="renderAll()">
+    <option value="">All Agents</option>
+  </select>
+  <div class="filter-sep"></div>
+  <label>Month</label>
+  <select id="monthFilter" onchange="renderAll()">
+    <option value="">All Months</option>
+  </select>
+  <div class="filter-sep"></div>
+  <label>Search Module</label>
+  <input type="text" id="moduleSearch" placeholder="e.g. W-2, Payroll…" oninput="renderAll()" style="width:180px"/>
+  <div class="filter-sep" id="peSep" style="display:none"></div>
+  <label id="peLabel" style="display:none">Manager</label>
+  <select id="peFilter" onchange="renderAll()" style="display:none">
+    <option value="">All Managers</option>
+  </select>
+</div>
+
+<div class="content">
+  <div class="tab-pane active" id="pane-overview"></div>
+  <div class="tab-pane" id="pane-daily"></div>
+  <div class="tab-pane" id="pane-modules"></div>
+  <div class="tab-pane" id="pane-agents"></div>
+  <div class="tab-pane" id="pane-overdue"></div>
+  <div class="tab-pane" id="pane-lowscore"></div>
+  <div class="tab-pane" id="pane-roster">
+    <div class="roster-wrap">
+      <div class="gap-card">
+        <h3>🗂 Paste Your Agent Roster</h3>
+        <p>Enter one name per line — exactly as they appear in Uplimit (First Last). The dashboard will compare the roster against the report and highlight anyone missing.</p>
+        <div class="roster-input-area">
+          <textarea id="rosterText" placeholder="Abegail Oval&#10;Allan Asia&#10;Amiela Edilloran&#10;..."></textarea>
+          <button class="roster-apply-btn" onclick="applyRoster()">Apply Roster</button>
+        </div>
+      </div>
+      <div id="rosterResults"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ──────────────────────────────────────────────
+//  SETUP SCREEN
+// ──────────────────────────────────────────────
+let setupReportTexts = [];
+let setupRosterText = '';
+
+function showSetupScreen() {
+  document.getElementById('setupOverlay').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+}
+
+function hideSetupScreen() {
+  document.getElementById('setupOverlay').classList.add('hidden');
+  document.body.style.overflow = '';
+}
+
+function updateSetupState() {
+  const hasReport = setupReportTexts.length > 0;
+  document.getElementById('setupStartBtn').disabled = !hasReport;
+  if (hasReport) {
+    document.getElementById('setupStep').textContent = 'Ready — click Build Dashboard';
+    document.getElementById('setupStep').style.color = 'var(--kale)';
+  } else {
+    document.getElementById('setupStep').textContent = 'Upload a report to get started';
+    document.getElementById('setupStep').style.color = '';
+  }
+}
+
+function handleSetupReport(e) {
+  const files = Array.from(e.target.files);
+  if (!files.length) return;
+  setupReportTexts = [];
+  let pending = files.length;
+  files.forEach((f, i) => {
+    const r = new FileReader();
+    r.onload = ev => {
+      setupReportTexts[i] = ev.target.result;
+      if (--pending === 0) {
+        const names = files.map(f => f.name).join(', ');
+        document.getElementById('setupFileLoaded').style.display = '';
+        document.getElementById('setupFileLoaded').textContent = '✓ ' + files.length + ' file' + (files.length > 1 ? 's' : '') + ' loaded: ' + names;
+        updateSetupState();
+      }
+    };
+    r.readAsText(f);
+  });
+}
+
+function handleSetupRoster(e) {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = ev => {
+    setupRosterText = ev.target.result;
+    document.getElementById('rosterFileLoaded').style.display = '';
+    document.getElementById('rosterFileLoaded').textContent = '✓ Roster loaded: ' + f.name;
+    // Pre-populate the roster textarea for later use
+    document.getElementById('rosterText').value = parseRosterFromText(setupRosterText);
+  };
+  r.readAsText(f);
+}
+
+function parseRosterFromText(text) {
+  // Try to detect if it's a CSV with a Name column
+  const lines = text.trim().split(/\r?\n/).filter(l => l.trim());
+  if (lines.length > 1) {
+    const header = lines[0].toLowerCase();
+    const nameIdx = header.split(',').findIndex(h => /name|agent|employee|user/i.test(h.trim().replace(/"/g,'')));
+    if (nameIdx >= 0) {
+      return lines.slice(1).map(l => {
+        const vals = l.split(',');
+        return (vals[nameIdx] || '').trim().replace(/^"|"$/g, '');
+      }).filter(Boolean).join('\n');
+    }
+  }
+  // Otherwise treat as plain list
+  return lines.map(l => l.split(',')[0].trim().replace(/^"|"$/g, '')).filter(Boolean).join('\n');
+}
+
+function launchDashboard() {
+  if (!setupReportTexts.length) return;
+  const programName = document.getElementById('setupProgramName').value.trim();
+  // Store program name so processCSVs can pick it up
+  window._pendingProgramName = programName || 'Training Dashboard';
+  processCSVs(setupReportTexts);
+  hideSetupScreen();
+}
+
+// Setup drag-drop
+function initSetupDrop() {
+  const dz = document.getElementById('setupDrop');
+  if (!dz) return;
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+  dz.addEventListener('drop', e => {
+    e.preventDefault(); dz.classList.remove('drag-over');
+    const files = Array.from(e.dataTransfer.files).filter(f => f.name.endsWith('.csv'));
+    if (files.length) {
+      const fakeEvent = { target: { files } };
+      handleSetupReport(fakeEvent);
+    }
+  });
+}
+
+
+
+let currentExportType = 'daily';
+
+function openExport() {
+  // Sync scope chips with current filters
+  const { agent, month } = getFilters();
+  const row = document.getElementById('scopeRow');
+  row.innerHTML = '';
+  if (agent) {
+    row.innerHTML += `<span class="scope-chip active" data-scope="agent">${agent}</span>`;
+  } else {
+    row.innerHTML += `<span class="scope-chip active" data-scope="all">All Agents</span>`;
+  }
+  if (month) {
+    const [y, mo] = month.split('-');
+    const label = new Date(y, mo-1).toLocaleString('default', {month:'long', year:'numeric'});
+    row.innerHTML += `<span class="scope-chip active" data-scope="month">${label}</span>`;
+  } else {
+    row.innerHTML += `<span class="scope-chip active" data-scope="allmonths">All Months</span>`;
+  }
+  updateExportFilename();
+  document.getElementById('exportOverlay').classList.add('open');
+}
+
+function closeExport() {
+  document.getElementById('exportOverlay').classList.remove('open');
+}
+
+function selectExport(type) {
+  currentExportType = type;
+  document.querySelectorAll('.export-option').forEach(o => {
+    o.classList.toggle('selected', o.querySelector('input').value === type);
+  });
+  updateExportFilename();
+}
+
+function selectScope(el) { /* scope is read-only — reflects filters */ }
+
+function updateExportFilename() {
+  const prog = (DATA && DATA.program_name ? DATA.program_name.toLowerCase().replace(/\s+/g,'-') : 'training');
+  const names = { daily: prog + '-daily-summary', modules: prog + '-module-matrix', log: prog + '-completion-log' };
+  const { month } = getFilters();
+  const suffix = month ? '-' + month : '';
+  document.getElementById('exportFilename').textContent = names[currentExportType] + suffix + '.csv';
+}
+
+function escapeCSV(val) {
+  if (val == null) return '';
+  const s = String(val);
+  if (s.includes(',') || s.includes('"') || s.includes('\n')) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+
+function buildCSV(rows) {
+  return rows.map(row => row.map(escapeCSV).join(',')).join('\r\n');
+}
+
+function runExport() {
+  const { agent, month, search } = getFilters();
+  const agents = agent ? [agent] : DATA.agents;
+  let modules = DATA.modules;
+  if (month) modules = modules.filter(m => DATA.module_dates[m]?.startsWith(month));
+  if (search) modules = modules.filter(m => m.toLowerCase().includes(search));
+
+  let csv = '';
+  let filename = document.getElementById('exportFilename').textContent;
+
+  if (currentExportType === 'daily') {
+    // Dates filtered by month
+    let dates = DATA.all_dates;
+    if (month) dates = dates.filter(d => d.startsWith(month));
+
+    const header = ['Agent', ...dates, 'Total Modules Completed'];
+    const rows = [header];
+    agents.forEach(a => {
+      const daily = DATA.agent_daily[a] || {};
+      let total = 0;
+      const dayCells = dates.map(d => {
+        const n = daily[d] || 0;
+        total += n;
+        return n > 0 ? n : '';
+      });
+      rows.push([a, ...dayCells, total]);
+    });
+    csv = buildCSV(rows);
+
+  } else if (currentExportType === 'modules') {
+    // Module × Agent matrix
+    const header = ['Module', 'Release Date', ...agents, 'Completion Rate'];
+    const rows = [header];
+    modules.forEach(mod => {
+      const releaseDate = DATA.module_dates[mod] || '';
+      let completed = 0;
+      const agentCells = agents.map(a => {
+        const date = DATA.agent_modules[a]?.[mod];
+        if (date) { completed++; return date; }
+        return '';
+      });
+      const rate = agents.length > 0 ? Math.round(completed / agents.length * 100) + '%' : '0%';
+      rows.push([mod, releaseDate, ...agentCells, rate]);
+    });
+    csv = buildCSV(rows);
+
+  } else if (currentExportType === 'log') {
+    // Flat completion log
+    const header = ['Agent', 'Module', 'Completion Date', 'Module Release Date', 'Days to Complete'];
+    const rows = [header];
+    agents.forEach(a => {
+      const completions = DATA.agent_modules[a] || {};
+      Object.entries(completions).forEach(([mod, completedDate]) => {
+        if (month && !completedDate.startsWith(month)) return;
+        if (search && !mod.toLowerCase().includes(search)) return;
+        const releaseDate = DATA.module_dates[mod] || '';
+        let daysDiff = '';
+        if (releaseDate && completedDate) {
+          const ms = new Date(completedDate) - new Date(releaseDate);
+          daysDiff = Math.max(0, Math.round(ms / 86400000));
+        }
+        rows.push([a, mod, completedDate, releaseDate, daysDiff]);
+      });
+    });
+    // Sort by agent then completion date
+    const header2 = rows.shift();
+    rows.sort((a, b) => a[0].localeCompare(b[0]) || a[2].localeCompare(b[2]));
+    rows.unshift(header2);
+    csv = buildCSV(rows);
+  }
+
+  // Trigger download
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+  closeExport();
+}
+
+// ──────────────────────────────────────────────
+//  EMBEDDED DATA
+// ──────────────────────────────────────────────
+const EMBEDDED = null; // Template version — no pre-loaded data
+let DATA = null;
+
+// ──────────────────────────────────────────────
+//  INIT
+// ──────────────────────────────────────────────
+// ──────────────────────────────────────────────
+//  HELPERS
+// ──────────────────────────────────────────────
+function getWeekStart(dateStr) {
+  const d = new Date(dateStr + 'T12:00:00');
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  d.setDate(diff);
+  return d.toISOString().slice(0,10);
+}
+
+function scorePillClass(score) {
+  if (score === null || score === undefined) return 'na';
+  if (score >= 80) return 'pass';
+  if (score >= 60) return 'warn';
+  return 'fail';
+}
+
+function progFillClass(pct) {
+  if (pct >= 90) return 'full';
+  if (pct >= 70) return 'high';
+  if (pct >= 40) return 'mid';
+  return 'low';
+}
+
+function daysSince(dateStr) {
+  if (!dateStr) return null;
+  const ms = new Date().getTime() - new Date(dateStr + 'T12:00:00').getTime();
+  return Math.floor(ms / 86400000);
+}
+
+// Build module scores: agent+module -> score (0-100)
+// Uplimit Total Points is 0-100; we store best score per agent+module
+function buildScoreMap() {
+  if (!DATA || !DATA._raw_scores) return {};
+  return DATA._raw_scores;
+}
+
+// ──────────────────────────────────────────────
+//  TAB: OVERVIEW
+// ──────────────────────────────────────────────
+function renderOverview() {
+  if (!DATA) { document.getElementById('pane-overview').innerHTML = '<div class="no-data">Upload a report to see overview.</div>'; return; }
+  const { agent, month, pe } = getFilters();
+  const agents = agent ? [agent] : (pe ? DATA.agents.filter(a => DATA.agent_pe && DATA.agent_pe[a] === pe) : DATA.agents);
+  let modules = DATA.modules;
+  if (month) modules = modules.filter(m => DATA.module_dates[m]?.startsWith(month));
+
+  const today = new Date().toISOString().slice(0,10);
+  const scoreMap = DATA._raw_scores || {};
+
+  // Compute per-agent stats
+  let totalAssignments = 0, totalCompleted = 0, totalOverdue = 0, totalLowScore = 0;
+  let allScores = [];
+
+  agents.forEach(a => {
+    const completed = new Set(Object.keys(DATA.agent_modules[a] || {}));
+    modules.forEach(mod => {
+      totalAssignments++;
+      if (completed.has(mod)) {
+        totalCompleted++;
+        const s = scoreMap[a+' '+mod];
+        if (s !== undefined) {
+          allScores.push(s);
+          if (s < 80) totalLowScore++;
+        }
+      } else {
+        // Overdue = module released in a previous week
+        const relDate = DATA.module_dates[mod];
+        if (relDate && getWeekStart(relDate) < getWeekStart(today)) totalOverdue++;
+      }
+    });
+  });
+
+  const totalIncomplete = totalAssignments - totalCompleted;
+  const avgScore = allScores.length ? Math.round(allScores.reduce((a,b)=>a+b,0)/allScores.length) : null;
+  const overallPct = totalAssignments > 0 ? Math.round(totalCompleted/totalAssignments*100) : 0;
+
+  // ── Stats cards
+  let html = '<div class="overview-wrap">';
+  html += `<div class="overview-grid">
+    <div class="ov-card"><div class="ov-card-val" style="color:var(--ink)">${totalAssignments.toLocaleString()}</div><div class="ov-card-label">Total Assignments</div></div>
+    <div class="ov-card"><div class="ov-card-val" style="color:var(--kale)">${totalCompleted.toLocaleString()}</div><div class="ov-card-label">Completed</div></div>
+    <div class="ov-card"><div class="ov-card-val" style="color:var(--muted)">${totalIncomplete.toLocaleString()}</div><div class="ov-card-label">Incomplete</div></div>
+    <div class="ov-card"><div class="ov-card-val" style="color:var(--danger)">${totalOverdue.toLocaleString()}</div><div class="ov-card-label">Overdue</div></div>
+    <div class="ov-card"><div class="ov-card-val" style="color:var(--warn)">${avgScore !== null ? avgScore+'%' : '—'}</div><div class="ov-card-label">Avg Score</div></div>
+  </div>`;
+
+  // ── By Training Module
+  html += '<div class="section-block">';
+  html += '<div class="ov-section-title">By Training Module</div>';
+  html += `<table class="ov-table"><thead><tr>
+    <th>Module</th><th>Released</th><th>Completion Rate</th><th>Avg Score</th><th>Missing</th>
+  </tr></thead><tbody>`;
+
+  modules.forEach(mod => {
+    const relDate = DATA.module_dates[mod] || '';
+    let modCompleted = 0, modScores = [];
+    agents.forEach(a => {
+      if (DATA.agent_modules[a]?.[mod]) {
+        modCompleted++;
+        const s = scoreMap[a+' '+mod];
+        if (s !== undefined) modScores.push(s);
+      }
+    });
+    const modPct = agents.length > 0 ? Math.round(modCompleted/agents.length*100) : 0;
+    const modAvg = modScores.length ? Math.round(modScores.reduce((a,b)=>a+b,0)/modScores.length) : null;
+    const missing = agents.length - modCompleted;
+    const fillCls = progFillClass(modPct);
+    html += `<tr>
+      <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${mod}">${mod}</td>
+      <td style="font-family:'DM Mono',monospace;font-size:0.62rem;color:var(--muted);white-space:nowrap">${relDate}</td>
+      <td><div class="prog-bar-wrap"><div class="prog-bar"><div class="prog-fill ${fillCls}" style="width:${modPct}%"></div></div><span class="prog-pct">${modPct}%</span></div></td>
+      <td><span class="score-pill ${modAvg !== null ? scorePillClass(modAvg) : 'na'}">${modAvg !== null ? modAvg+'%' : '—'}</span></td>
+      <td style="font-family:'DM Mono',monospace;font-size:0.68rem;color:${missing>0?'var(--danger)':'var(--muted)'}">${missing > 0 ? missing : '✓'}</td>
+    </tr>`;
+  });
+  html += '</tbody></table></div>';
+  html += '</div>';
+  document.getElementById('pane-overview').innerHTML = html;
+}
+
+// ──────────────────────────────────────────────
+//  TAB: AGENT SUMMARY
+// ──────────────────────────────────────────────
+function renderAgents() {
+  if (!DATA) { document.getElementById('pane-agents').innerHTML = '<div class="no-data">Upload a report to see agent summary.</div>'; return; }
+  const { agent, month, pe } = getFilters();
+  const agents = agent ? [agent] : (pe ? DATA.agents.filter(a => DATA.agent_pe && DATA.agent_pe[a] === pe) : DATA.agents);
+  let modules = DATA.modules;
+  if (month) modules = modules.filter(m => DATA.module_dates[m]?.startsWith(month));
+
+  const today = new Date().toISOString().slice(0,10);
+  const scoreMap = DATA._raw_scores || {};
+
+  let html = '<div class="agent-wrap">';
+  html += `<table class="agent-table"><thead><tr>
+    <th>Agent</th>
+    <th>Manager</th>
+    <th>% Complete</th>
+    <th>Completed</th>
+    <th>Missing</th>
+    <th>Avg Score</th>
+    <th>Last Activity</th>
+    <th>Status</th>
+  </tr></thead><tbody>`;
+
+  // Sort by completion % ascending (worst first)
+  const agentRows = agents.map(a => {
+    const completed = modules.filter(m => DATA.agent_modules[a]?.[m]);
+    const missing = modules.filter(m => !DATA.agent_modules[a]?.[m]);
+    const overdue = missing.filter(m => {
+      const rel = DATA.module_dates[m];
+      return rel && getWeekStart(rel) < getWeekStart(today);
+    });
+    const scores = completed.map(m => scoreMap[a+' '+m]).filter(s => s !== undefined);
+    const avgScore = scores.length ? Math.round(scores.reduce((x,y)=>x+y,0)/scores.length) : null;
+    const pct = modules.length > 0 ? Math.round(completed.length/modules.length*100) : 0;
+    // Last activity date
+    const dates = Object.values(DATA.agent_modules[a] || {});
+    const lastDate = dates.length ? dates.sort().slice(-1)[0] : null;
+    const daysAgo = lastDate ? daysSince(lastDate) : null;
+    const managerName = DATA.agent_pe?.[a] || '—';
+    return { a, pct, completed: completed.length, missing: missing.length, overdue: overdue.length, avgScore, lastDate, daysAgo, managerName };
+  }).sort((x,y) => x.pct - y.pct);
+
+  agentRows.forEach(({ a, pct, completed, missing, overdue, avgScore, lastDate, daysAgo, managerName }) => {
+    let statusLabel, statusCls;
+    if (pct === 100) { statusLabel = 'Complete'; statusCls = 'complete'; }
+    else if (overdue > 0) { statusLabel = `${overdue} Overdue`; statusCls = 'overdue'; }
+    else if (avgScore !== null && avgScore < 80) { statusLabel = 'Low Score'; statusCls = 'low-score'; }
+    else { statusLabel = 'In Progress'; statusCls = 'in-progress'; }
+
+    const fillCls = progFillClass(pct);
+    html += `<tr>
+      <td class="agent-name-cell">${a}</td>
+      <td style="font-size:0.68rem;color:var(--muted)">${managerName}</td>
+      <td><div class="prog-bar-wrap"><div class="prog-bar"><div class="prog-fill ${fillCls}" style="width:${pct}%"></div></div><span class="prog-pct">${pct}%</span></div></td>
+      <td style="font-family:'DM Mono',monospace;font-size:0.68rem;color:var(--kale)">${completed}</td>
+      <td style="font-family:'DM Mono',monospace;font-size:0.68rem;color:${missing>0?'var(--danger)':'var(--muted)'}">${missing > 0 ? missing : '✓'}</td>
+      <td><span class="score-pill ${avgScore !== null ? scorePillClass(avgScore) : 'na'}">${avgScore !== null ? avgScore+'%' : '—'}</span></td>
+      <td><span class="days-badge ${daysAgo !== null && daysAgo > 14 ? 'stale' : ''}">${lastDate ? formatDate(lastDate) + (daysAgo !== null ? ' ('+daysAgo+'d ago)' : '') : '—'}</span></td>
+      <td><span class="status-badge ${statusCls}">${statusLabel}</span></td>
+    </tr>`;
+  });
+
+  html += '</tbody></table></div>';
+  document.getElementById('pane-agents').innerHTML = html;
+}
+
+// ──────────────────────────────────────────────
+//  TAB: OVERDUE
+// ──────────────────────────────────────────────
+function renderOverdue() {
+  if (!DATA) { document.getElementById('pane-overdue').innerHTML = '<div class="no-data">Upload a report to see overdue trainings.</div>'; return; }
+  const { agent, month, pe } = getFilters();
+  const agents = agent ? [agent] : (pe ? DATA.agents.filter(a => DATA.agent_pe && DATA.agent_pe[a] === pe) : DATA.agents);
+  let modules = DATA.modules;
+  if (month) modules = modules.filter(m => DATA.module_dates[m]?.startsWith(month));
+
+  const today = new Date().toISOString().slice(0,10);
+  const todayWeek = getWeekStart(today);
+
+  // Build list of overdue: agent hasn't completed a module released in a previous week
+  const overdueList = [];
+  agents.forEach(a => {
+    modules.forEach(mod => {
+      if (DATA.agent_modules[a]?.[mod]) return; // completed — skip
+      const relDate = DATA.module_dates[mod];
+      if (!relDate) return;
+      const relWeek = getWeekStart(relDate);
+      if (relWeek >= todayWeek) return; // current or future week — not overdue yet
+      const daysOverdue = Math.floor((new Date(today) - new Date(relWeek)) / 86400000);
+      overdueList.push({ agent: a, mod, relDate, daysOverdue, manager: DATA.agent_pe?.[a] || '—' });
+    });
+  });
+
+  // Sort by most overdue first
+  overdueList.sort((a,b) => b.daysOverdue - a.daysOverdue);
+
+  let html = '<div class="overview-wrap">';
+
+  if (!overdueList.length) {
+    html += '<div style="padding:40px;text-align:center;color:var(--kale);font-size:0.85rem;font-weight:600">✓ No overdue trainings for the current filters.</div>';
+  } else {
+    html += `<div style="margin-bottom:16px;font-size:0.78rem;color:var(--muted)">Showing <strong style="color:var(--danger)">${overdueList.length}</strong> overdue assignment${overdueList.length!==1?'s':''} — modules from previous weeks not yet completed.</div>`;
+    html += `<table class="ov-table"><thead><tr>
+      <th>Agent</th><th>Manager</th><th>Module</th><th>Released</th><th>Days Overdue</th>
+    </tr></thead><tbody>`;
+    overdueList.forEach(({ agent, mod, relDate, daysOverdue, manager }) => {
+      html += `<tr>
+        <td class="agent-name-cell">${agent}</td>
+        <td style="font-size:0.68rem;color:var(--muted)">${manager}</td>
+        <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${mod}">${mod}</td>
+        <td style="font-family:'DM Mono',monospace;font-size:0.62rem;color:var(--muted)">${relDate}</td>
+        <td><span class="urgency-days">${daysOverdue}d</span></td>
+      </tr>`;
+    });
+    html += '</tbody></table>';
+  }
+  html += '</div>';
+  document.getElementById('pane-overdue').innerHTML = html;
+}
+
+// ──────────────────────────────────────────────
+//  TAB: LOW SCORES
+// ──────────────────────────────────────────────
+function renderLowScores() {
+  if (!DATA) { document.getElementById('pane-lowscore').innerHTML = '<div class="no-data">Upload a report to see low score alerts.</div>'; return; }
+  const { agent, month, pe } = getFilters();
+  const agents = agent ? [agent] : (pe ? DATA.agents.filter(a => DATA.agent_pe && DATA.agent_pe[a] === pe) : DATA.agents);
+  let modules = DATA.modules;
+  if (month) modules = modules.filter(m => DATA.module_dates[m]?.startsWith(month));
+
+  const scoreMap = DATA._raw_scores || {};
+
+  const lowList = [];
+  agents.forEach(a => {
+    modules.forEach(mod => {
+      if (!DATA.agent_modules[a]?.[mod]) return; // not completed
+      const s = scoreMap[a+' '+mod];
+      if (s === undefined || s >= 80) return;
+      lowList.push({ agent: a, mod, score: s, completedDate: DATA.agent_modules[a][mod], manager: DATA.agent_pe?.[a] || '—' });
+    });
+  });
+
+  lowList.sort((a,b) => a.score - b.score);
+
+  let html = '<div class="overview-wrap">';
+  if (!lowList.length) {
+    html += '<div style="padding:40px;text-align:center;color:var(--kale);font-size:0.85rem;font-weight:600">✓ No scores below 80% for the current filters.</div>';
+  } else {
+    html += `<div style="margin-bottom:16px;font-size:0.78rem;color:var(--muted)">Showing <strong style="color:var(--warn)">${lowList.length}</strong> completion${lowList.length!==1?'s':''} with score below 80% — these agents may need coaching.</div>`;
+    html += `<table class="ov-table"><thead><tr>
+      <th>Agent</th><th>Manager</th><th>Module</th><th>Score</th><th>Completed</th>
+    </tr></thead><tbody>`;
+    lowList.forEach(({ agent, mod, score, completedDate, manager }) => {
+      html += `<tr>
+        <td class="agent-name-cell">${agent}</td>
+        <td style="font-size:0.68rem;color:var(--muted)">${manager}</td>
+        <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${mod}">${mod}</td>
+        <td><span class="score-pill ${scorePillClass(score)}">${score}%</span></td>
+        <td style="font-family:'DM Mono',monospace;font-size:0.62rem;color:var(--muted)">${completedDate}</td>
+      </tr>`;
+    });
+    html += '</tbody></table>';
+  }
+  html += '</div>';
+  document.getElementById('pane-lowscore').innerHTML = html;
+}
+
+
+function init() {
+  if (DATA) {
+    populateFilters();
+    renderStats();
+    renderAll();
+  } else {
+    showSetupScreen();
+  }
+}
+
+function populateFilters() {
+  const af = document.getElementById('agentFilter');
+  af.innerHTML = '<option value="">All Agents</option>';
+  DATA.agents.forEach(a => { const o = document.createElement('option'); o.value = a; o.textContent = a; af.appendChild(o); });
+
+  const months = [...new Set(DATA.all_dates.map(d => d.slice(0,7)))].sort();
+  const mf = document.getElementById('monthFilter');
+  mf.innerHTML = '<option value="">All Months</option>';
+  months.forEach(m => {
+    const [y, mo] = m.split('-');
+    const label = new Date(y, mo-1).toLocaleString('default', {month:'long', year:'numeric'});
+    const o = document.createElement('option'); o.value = m; o.textContent = label; mf.appendChild(o);
+  });
+
+  // PE Name filter
+  const pf = document.getElementById('peFilter');
+  if (DATA.pe_names && DATA.pe_names.length > 0) {
+    pf.innerHTML = '<option value="">All Managers</option>';
+    DATA.pe_names.forEach(pe => { const o = document.createElement('option'); o.value = pe; o.textContent = pe; pf.appendChild(o); });
+    document.getElementById('peSep').style.display = '';
+    document.getElementById('peLabel').style.display = '';
+    pf.style.display = '';
+  }
+
+  // Update header title from stored config
+  if (DATA.program_name) {
+    const parts = DATA.program_name.split(' ');
+    const last = parts.pop();
+    document.getElementById('programTitle').innerHTML = parts.join(' ') + ' <span>' + last + '</span>';
+    document.getElementById('programSubtitle').textContent = DATA.program_name + ' · Gustie Guide Completion Tracker';
+    document.title = DATA.program_name + ' Dashboard';
+    document.querySelector('.logo-mark').textContent = 'gusto';
+  }
+}
+
+function renderStats() {
+  const total = DATA.agents.length;
+  const totalMods = DATA.modules.length;
+  let totalCompletions = 0;
+  DATA.agents.forEach(a => totalCompletions += Object.keys(DATA.agent_modules[a]||{}).length);
+  const avgPct = Math.round(totalCompletions / (total * totalMods) * 100);
+  // Active last 7 days
+  const cutoff = DATA.all_dates[DATA.all_dates.length - 8] || DATA.all_dates[0];
+  const recentActive = DATA.agents.filter(a => {
+    const days = DATA.agent_daily[a] || {};
+    return Object.keys(days).some(d => d >= cutoff);
+  }).length;
+
+  document.getElementById('statsStrip').innerHTML = `
+    <div class="stat"><div class="stat-val" style="color:var(--guava)">${total}</div><div class="stat-label">Agents in Report</div></div>
+    <div class="stat"><div class="stat-val" style="color:var(--kale)">${totalMods}</div><div class="stat-label">Total Modules</div></div>
+    <div class="stat"><div class="stat-val" style="color:var(--ink)">${totalCompletions.toLocaleString()}</div><div class="stat-label">Total Completions</div></div>
+    <div class="stat"><div class="stat-val" style="color:var(--kale)">${avgPct}%</div><div class="stat-label">Avg Coverage</div></div>
+    <div class="stat"><div class="stat-val" style="color:var(--guava)">${recentActive}</div><div class="stat-label">Active Recently</div></div>
+  `;
+}
+
+function getFilters() {
+  return {
+    agent: document.getElementById('agentFilter').value,
+    month: document.getElementById('monthFilter').value,
+    search: document.getElementById('moduleSearch').value.trim().toLowerCase(),
+    pe: document.getElementById('peFilter').value
+  };
+}
+
+function renderAll() {
+  renderOverview();
+  renderDaily();
+  renderModules();
+  renderAgents();
+  renderOverdue();
+  renderLowScores();
+}
+
+// ──────────────────────────────────────────────
+//  TAB: DAILY
+// ──────────────────────────────────────────────
+function renderDaily() {
+  const { agent, month } = getFilters();
+  const { pe } = getFilters();
+  const agents = agent ? [agent] : (pe ? DATA.agents.filter(a => DATA.agent_pe && DATA.agent_pe[a] === pe) : DATA.agents);
+
+  // Filter dates by month
+  let dates = DATA.all_dates;
+  if (month) dates = dates.filter(d => d.startsWith(month));
+
+  // Group dates by month
+  const byMonth = {};
+  dates.forEach(d => {
+    const mk = d.slice(0,7);
+    if (!byMonth[mk]) byMonth[mk] = [];
+    byMonth[mk].push(d);
+  });
+
+  let html = '<div class="daily-wrap">';
+
+  for (const [mk, mDates] of Object.entries(byMonth)) {
+    const [y, mo] = mk.split('-');
+    const mLabel = new Date(y, mo-1).toLocaleString('default', {month:'long', year:'numeric'});
+    html += `<div class="month-group"><div class="month-label">${mLabel}</div>`;
+    html += `<table class="daily-table"><thead><tr>
+      <th style="min-width:140px">Agent</th>`;
+    mDates.forEach(d => {
+      const dt = new Date(d + 'T12:00:00');
+      const dayAbbr = dt.toLocaleString('default', {weekday:'short'}).slice(0,2);
+      const dayNum = dt.getDate();
+      html += `<th class="date-th" title="${d}">${dayAbbr}<br/>${dayNum}</th>`;
+    });
+    html += `<th style="text-align:right;padding-right:4px">Total</th></tr></thead><tbody>`;
+
+    agents.forEach(a => {
+      const daily = DATA.agent_daily[a] || {};
+      let rowTotal = 0;
+      mDates.forEach(d => { if (daily[d]) rowTotal += daily[d]; });
+      if (!rowTotal && agent === '') return; // skip rows with 0 in this month unless filtered
+      html += `<tr><td class="sticky-agent"><span class="agent-cell">${a}</span></td>`;
+      mDates.forEach(d => {
+        const cnt = daily[d] || 0;
+        if (cnt) {
+          html += `<td class="day-cell"><span class="day-dot has-activity" data-tip="${a} — ${formatDate(d)}: ${cnt} module${cnt>1?'s':''} completed">${cnt}</span></td>`;
+        } else {
+          html += `<td class="day-cell"><span class="day-dot no-activity">·</span></td>`;
+        }
+      });
+      html += `<td class="tot-cell">${rowTotal > 0 ? rowTotal : '—'}</td></tr>`;
+    });
+    html += `</tbody></table></div>`;
+  }
+  if (!dates.length) html += `<div class="no-data">No activity data for the selected filters.</div>`;
+  html += '</div>';
+  document.getElementById('pane-daily').innerHTML = html;
+
+  // Tooltips
+  document.querySelectorAll('[data-tip]').forEach(el => {
+    el.addEventListener('mouseenter', e => showTip(e.target.dataset.tip, e));
+    el.addEventListener('mouseleave', hideTip);
+  });
+}
+
+// ──────────────────────────────────────────────
+//  TAB: MODULES
+// ──────────────────────────────────────────────
+function renderModules() {
+  const { agent, month, search } = getFilters();
+  const { pe } = getFilters();
+  const agents = agent ? [agent] : (pe ? DATA.agents.filter(a => DATA.agent_pe && DATA.agent_pe[a] === pe) : DATA.agents);
+
+  let modules = DATA.modules;
+  if (month) modules = modules.filter(m => {
+    const earliest = DATA.module_dates[m];
+    return earliest && earliest.startsWith(month);
+  });
+  if (search) modules = modules.filter(m => m.toLowerCase().includes(search));
+
+  if (!modules.length) {
+    document.getElementById('pane-modules').innerHTML = `<div class="no-data">No modules match your filters.</div>`;
+    return;
+  }
+
+  let html = '<div class="module-wrap">';
+  html += `<table class="module-table"><thead><tr>
+    <th class="sticky-agent" style="min-width:220px">Module</th>
+    <th>Released</th>`;
+  agents.forEach(a => {
+    const short = a.split(' ')[0];
+    html += `<th title="${a}">${short}</th>`;
+  });
+  html += `<th style="text-align:right">Coverage</th></tr></thead><tbody>`;
+
+  modules.forEach(mod => {
+    const releaseDate = DATA.module_dates[mod] || '';
+    let completedCount = 0;
+    agents.forEach(a => { if (DATA.agent_modules[a]?.[mod]) completedCount++; });
+    const pct = Math.round(completedCount / agents.length * 100);
+    const pctCls = pct === 100 ? 'full' : pct >= 75 ? 'high' : pct >= 40 ? 'mid' : 'low';
+
+    html += `<tr><td class="sticky-agent mod-name-cell" title="${mod}">${mod}</td>`;
+    html += `<td class="mod-date-cell">${releaseDate ? formatDate(releaseDate) : '—'}</td>`;
+    agents.forEach(a => {
+      const completedOn = DATA.agent_modules[a]?.[mod];
+      if (completedOn) {
+        html += `<td><span class="mod-check done" title="${a} completed on ${formatDate(completedOn)}">✓</span></td>`;
+      } else {
+        html += `<td><span class="mod-check miss" title="${a} has not completed this">·</span></td>`;
+      }
+    });
+    html += `<td class="mod-pct-cell"><span class="pct-pill ${pctCls}">${completedCount}/${agents.length}</span></td></tr>`;
+  });
+
+  html += `</tbody></table></div>`;
+  document.getElementById('pane-modules').innerHTML = html;
+}
+
+// ──────────────────────────────────────────────
+//  TAB: ROSTER
+// ──────────────────────────────────────────────
+function applyRoster() {
+  const raw = document.getElementById('rosterText').value.trim();
+  if (!raw) return;
+  const roster = raw.split(/\r?\n/).map(n => n.trim()).filter(Boolean);
+  const reportNames = new Set(DATA.agents.map(n => n.toLowerCase().trim()));
+  const rosterNormed = roster.map(n => ({ orig: n, norm: n.toLowerCase().trim() }));
+
+  const missing = rosterNormed.filter(r => !reportNames.has(r.norm));
+  const extra = DATA.agents.filter(a => !rosterNormed.find(r => r.norm === a.toLowerCase().trim()));
+  const inactive = DATA.agents.filter(a => {
+    const daily = DATA.agent_daily[a] || {};
+    return Object.keys(daily).length === 0;
+  });
+
+  let html = '';
+
+  html += `<div class="gap-card">
+    <h3 style="color:var(--danger)">🔴 On Roster, Not in Report (${missing.length})</h3>
+    <p>These agents are on your roster but have zero activity in the loaded Uplimit data.</p>`;
+  if (missing.length === 0) {
+    html += `<p class="gap-none">✓ All roster members appear in the report.</p>`;
+  } else {
+    html += `<div class="chip-grid">${missing.map(m => `<div class="chip missing">${m.orig}</div>`).join('')}</div>`;
+  }
+  html += `</div>`;
+
+  if (extra.length > 0) {
+    html += `<div class="gap-card">
+      <h3 style="color:var(--warn)">🟡 In Report, Not on Roster (${extra.length})</h3>
+      <p>These agents have Uplimit activity but weren't on the roster you provided.</p>
+      <div class="chip-grid">${extra.map(e => `<div class="chip extra">${e}</div>`).join('')}</div>
+    </div>`;
+  }
+
+  if (inactive.length > 0) {
+    html += `<div class="gap-card">
+      <h3 style="color:var(--muted)">⚪ In Report, Zero Activity</h3>
+      <p>These agents appear in the Uplimit export but have no completions recorded.</p>
+      <div class="chip-grid">${inactive.map(e => `<div class="chip inactive">${e}</div>`).join('')}</div>
+    </div>`;
+  }
+
+  document.getElementById('rosterResults').innerHTML = html;
+}
+
+// ──────────────────────────────────────────────
+//  UPLOAD HANDLER (new CSV files)
+// ──────────────────────────────────────────────
+function openUpload() { document.getElementById('uploadOverlay').classList.add('open'); }
+function closeUpload() { document.getElementById('uploadOverlay').classList.remove('open'); }
+
+function handleFileUpload(e) {
+  const files = Array.from(e.target.files);
+  if (!files.length) return;
+  let pending = files.length;
+  const texts = [];
+  files.forEach((f, i) => {
+    const r = new FileReader();
+    r.onload = ev => {
+      texts[i] = ev.target.result;
+      if (--pending === 0) processCSVs(texts);
+    };
+    r.readAsText(f);
+  });
+  closeUpload();
+}
+
+function parseCSVRows(text) {
+  const lines = text.trim().split(/\r?\n/).filter(l => l.trim());
+  if (lines.length < 2) return [];
+  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    const vals = splitCSVLine(lines[i]);
+    const obj = {};
+    headers.forEach((h, j) => obj[h] = (vals[j]||'').trim().replace(/^"|"$/g, ''));
+    rows.push(obj);
+  }
+  return rows;
+}
+
+function splitCSVLine(line) {
+  const result = []; let cur = ''; let inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    if (line[i] === '"') { inQ = !inQ; }
+    else if (line[i] === ',' && !inQ) { result.push(cur); cur = ''; }
+    else cur += line[i];
+  }
+  result.push(cur);
+  return result;
+}
+
+function processCSVs(texts) {
+  const allRows = texts.flatMap(t => parseCSVRows(t));
+  if (!allRows.length) return;
+
+  // Capture PE Names (manager names) from PE Name column
+  const peMap = {}; // agent -> PE name
+  allRows.forEach(row => {
+    const name = row['Full Name']; const pe = row['PE Name'];
+    if (name && pe) peMap[name] = pe;
+  });
+
+  // Step 1: Deduplicate by agent+module — Group Name causes each completion to appear
+  // 2-3x (once per group the agent belongs to). Keep only the earliest submission date.
+  const compMap = {}; // agent -> module -> earliest date
+  allRows.forEach(row => {
+    const name = row['Full Name']; const mod = row['Content Week Name']; const ts = row['Latest Submission Time'];
+    if (!name || !mod || !ts) return;
+    const date = ts.slice(0,10);
+    if (!compMap[name]) compMap[name] = {};
+    // Only keep the earliest submission date per agent+module
+    if (!compMap[name][mod] || date < compMap[name][mod]) compMap[name][mod] = date;
+  });
+
+  const agents = Object.keys(compMap).sort();
+  const modDateMap = {};
+  Object.values(compMap).forEach(mods => {
+    Object.entries(mods).forEach(([m, d]) => {
+      if (!modDateMap[m] || d < modDateMap[m]) modDateMap[m] = d;
+    });
+  });
+  const modules = Object.keys(modDateMap).sort((a,b) => modDateMap[a].localeCompare(modDateMap[b]));
+
+  // Step 2: Build daily counts from the deduplicated compMap (unique modules per day),
+  // NOT from raw row counts. This prevents Group Name inflation.
+  const agentDaily = {};
+  agents.forEach(a => {
+    agentDaily[a] = {};
+    // compMap[a] is already deduped: one entry per unique module
+    Object.values(compMap[a]).forEach(d => { agentDaily[a][d] = (agentDaily[a][d]||0) + 1; });
+  });
+
+  const allDates = [...new Set(Object.values(agentDaily).flatMap(Object.keys))].sort();
+  const minD = allDates[0]; const maxD = allDates[allDates.length-1];
+
+  // Build score map: agent+module -> best score (0-100)
+  const rawScores = {};
+  allRows.forEach(row => {
+    const name = row['Full Name'] || row['FULL_NAME'];
+    const mod = row['Content Week Name'] || row['CONTENT_WEEK_NAME'];
+    const score = parseFloat(row['Total Points'] || row['TOTAL_POINTS'] || '0');
+    if (!name || !mod || isNaN(score)) return;
+    const key = name + '\x00' + mod;
+    if (rawScores[key] === undefined || score > rawScores[key]) rawScores[key] = score;
+  });
+
+  const peNames = [...new Set(Object.values(peMap))].filter(Boolean).sort();
+  const programName = window._pendingProgramName || (DATA && DATA.program_name ? DATA.program_name : '');  window._pendingProgramName = null;
+  DATA = { agents, modules, module_dates: modDateMap, agent_modules: compMap, agent_daily: agentDaily, all_dates: allDates, pe_names: peNames, agent_pe: peMap, program_name: programName, _raw_scores: rawScores };
+  document.getElementById('dateRange').textContent = `${formatDate(minD)} → ${formatDate(maxD)}`;
+  populateFilters();
+  renderStats();
+  renderAll();
+}
+
+// ──────────────────────────────────────────────
+//  HELPERS
+// ──────────────────────────────────────────────
+function formatDate(d) {
+  if (!d) return '—';
+  const [y, m, day] = d.split('-');
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${months[+m-1]} ${+day}, ${y}`;
+}
+
+function switchTab(id, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('pane-' + id).classList.add('active');
+}
+
+const tooltip = document.getElementById('tooltip');
+function showTip(text, e) {
+  tooltip.textContent = text;
+  tooltip.style.display = 'block';
+  moveTip(e);
+}
+function moveTip(e) {
+  tooltip.style.left = (e.clientX + 12) + 'px';
+  tooltip.style.top = (e.clientY + 12) + 'px';
+}
+function hideTip() { tooltip.style.display = 'none'; }
+document.addEventListener('mousemove', e => { if (tooltip.style.display === 'block') moveTip(e); });
+
+// Drag drop
+const dz = document.getElementById('dropZone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('drag-over');
+  const files = Array.from(e.dataTransfer.files).filter(f => f.name.endsWith('.csv'));
+  if (files.length) {
+    let pending = files.length; const texts = [];
+    files.forEach((f,i) => { const r = new FileReader(); r.onload = ev => { texts[i] = ev.target.result; if (--pending === 0) { processCSVs(texts); closeUpload(); } }; r.readAsText(f); });
+  }
+});
+
+initSetupDrop();
+init();
+</script>
+
+</body>
+</html>
