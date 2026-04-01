@@ -8,6 +8,10 @@ export type ProcessedDashboardData = {
   all_dates: string[];
   pe_names: string[];
   agent_pe: Record<string, string>;
+  /** Distinct group labels from GROUP_NAME (sorted). */
+  group_names: string[];
+  /** Per agent: unique groups they appear in (any row); agent in Team filter if any group matches. */
+  agent_groups: Record<string, string[]>;
   program_name: string;
   /** Per agent, per module: best Total Points (0–100). Nested so JSONB has no \\0 in keys. */
   _raw_scores: Record<string, Record<string, number>>;

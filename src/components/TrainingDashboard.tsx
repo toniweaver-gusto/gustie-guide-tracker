@@ -9,10 +9,18 @@ import {
 import {
   buildExportCsv,
   exportFilename,
+  type ExportFilters,
   type ExportType,
 } from "@/lib/exportCsv";
-import { parseRosterFromText, processCSVTexts } from "@/lib/csvParse";
+import { processCSVTexts } from "@/lib/csvParse";
 import { formatDate } from "@/lib/formatDate";
+import {
+  LOW_SCORE_THRESHOLD,
+  daysSince,
+  getWeekStart,
+  progFillClass,
+  scorePillClass,
+} from "@/lib/dashboardHelpers";
 import {
   normalizeRawScores,
   sanitizeForPostgres,
@@ -26,58 +34,109 @@ import {
 } from "@/lib/dashboardApi";
 import { shareUrlForToken } from "@/lib/appPaths";
 import { supabaseConfigured } from "@/lib/supabaseClient";
+import { FilterPicklist } from "@/components/FilterPicklist";
+import {
+  applyPicklistItemToggle,
+  initialPicklistState,
+  picklistButtonLabel,
+  toggleAllPicklist,
+  type PicklistId,
+  type PicklistSelection,
+} from "@/lib/picklistEngine";
 
 const SESSION_KEY = "uplimit_dashboard_token";
 
-/** Low score threshold (matches HTML dashboard). */
-const LOW_SCORE_THRESHOLD = 80;
-
-function getWeekStart(dateStr: string): string {
-  const d = new Date(dateStr + "T12:00:00");
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  d.setDate(diff);
-  return d.toISOString().slice(0, 10);
-}
-
-function scorePillClass(
-  score: number | null | undefined
-): "pass" | "warn" | "fail" | "na" {
-  if (score === null || score === undefined) return "na";
-  if (score >= LOW_SCORE_THRESHOLD) return "pass";
-  if (score >= 60) return "warn";
-  return "fail";
-}
-
-function progFillClass(pct: number): "full" | "high" | "mid" | "low" {
-  if (pct >= 90) return "full";
-  if (pct >= 70) return "high";
-  if (pct >= 40) return "mid";
-  return "low";
-}
-
-function daysSince(dateStr: string | null): number | null {
-  if (!dateStr) return null;
-  const ms =
-    new Date().getTime() - new Date(dateStr + "T12:00:00").getTime();
-  return Math.floor(ms / 86400000);
-}
-
-type DashboardFilters = {
-  agent: string;
-  month: string;
-  search: string;
-  pe: string;
+/** Multi-select: `null` = all, `[]` = none, `[...]` = subset */
+export type DashboardFilters = {
+  agents: PicklistSelection;
+  months: PicklistSelection;
+  modules: PicklistSelection;
+  managers: PicklistSelection;
+  teams: PicklistSelection;
 };
 
-function agentsForFilters(
+function filterAgentsList(
   data: ProcessedDashboardData,
-  agent: string,
-  pe: string
+  f: DashboardFilters
 ): string[] {
-  if (agent) return [agent];
-  if (pe) return data.agents.filter((a) => data.agent_pe?.[a] === pe);
-  return data.agents;
+  let list = [...data.agents];
+  if (f.agents !== null) {
+    if (f.agents.length === 0) return [];
+    list = list.filter((a) => f.agents!.includes(a));
+  }
+  if (f.managers !== null) {
+    if (f.managers.length === 0) return [];
+    list = list.filter((a) =>
+      f.managers!.some((pe) => data.agent_pe[a] === pe)
+    );
+  }
+  if (f.teams !== null) {
+    if (f.teams.length === 0) return [];
+    list = list.filter((a) => {
+      const gs = data.agent_groups[a] ?? [];
+      return f.teams!.some((t) => gs.includes(t));
+    });
+  }
+  return list;
+}
+
+function filterModulesForViews(
+  data: ProcessedDashboardData,
+  f: DashboardFilters
+): string[] {
+  let modules = [...data.modules];
+  if (f.months !== null) {
+    if (f.months.length === 0) return [];
+    modules = modules.filter((m) => {
+      const rd = data.module_dates[m];
+      return Boolean(rd && f.months!.some((mo) => rd.startsWith(mo)));
+    });
+  }
+  if (f.modules !== null) {
+    if (f.modules.length === 0) return [];
+    modules = modules.filter((m) => f.modules!.includes(m));
+  }
+  return modules;
+}
+
+function filterDatesForViews(
+  data: ProcessedDashboardData,
+  f: DashboardFilters
+): string[] {
+  if (f.months === null) return [...data.all_dates];
+  if (f.months.length === 0) return [];
+  return data.all_dates.filter((d) =>
+    f.months!.some((mo) => d.startsWith(mo))
+  );
+}
+
+function formatMonthKey(m: string): string {
+  const [y, mo] = m.split("-");
+  return new Date(Number(y), Number(mo) - 1).toLocaleString("default", {
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function picklistAllValues(
+  id: PicklistId,
+  data: ProcessedDashboardData,
+  monthKeys: string[]
+): string[] {
+  switch (id) {
+    case "agent":
+      return [...data.agents];
+    case "month":
+      return monthKeys;
+    case "module":
+      return [...data.modules];
+    case "team":
+      return [...data.group_names];
+    case "manager":
+      return [...data.pe_names];
+    default:
+      return [];
+  }
 }
 
 function readFilesAsText(files: File[]): Promise<string[]> {
@@ -122,13 +181,8 @@ function renderOverview(
   data: ProcessedDashboardData,
   f: DashboardFilters
 ): ReactNode {
-  const agents = agentsForFilters(data, f.agent, f.pe);
-  let modules = data.modules;
-  if (f.month) {
-    modules = modules.filter((m) =>
-      data.module_dates[m]?.startsWith(f.month)
-    );
-  }
+  const agents = filterAgentsList(data, f);
+  const modules = filterModulesForViews(data, f);
 
   const today = new Date().toISOString().slice(0, 10);
   const scoreMap = data._raw_scores ?? {};
@@ -163,6 +217,14 @@ function renderOverview(
   const avgScore = allScores.length
     ? Math.round(allScores.reduce((x, y) => x + y, 0) / allScores.length)
     : null;
+
+  if (!modules.length) {
+    return (
+      <div className="overview-wrap">
+        <div className="no-data">No modules match your filters.</div>
+      </div>
+    );
+  }
 
   return (
     <div className="overview-wrap">
@@ -303,9 +365,8 @@ function renderDaily(
   f: DashboardFilters,
   setTooltip: TooltipSetter
 ): ReactNode {
-  const agents = agentsForFilters(data, f.agent, f.pe);
-  let dates = data.all_dates;
-  if (f.month) dates = dates.filter((d) => d.startsWith(f.month));
+  const agents = filterAgentsList(data, f);
+  const dates = filterDatesForViews(data, f);
 
   const byMonth: Record<string, string[]> = {};
   dates.forEach((d) => {
@@ -352,7 +413,7 @@ function renderDaily(
               mDates.forEach((d) => {
                 if (daily[d]) rowTotal += daily[d];
               });
-              if (!rowTotal && f.agent === "") return null;
+              if (!rowTotal && f.agents === null) return null;
               return (
                 <tr key={a}>
                   <td className="sticky-agent">
@@ -413,23 +474,18 @@ function renderModules(
   data: ProcessedDashboardData,
   f: DashboardFilters
 ): ReactNode {
-  const agents = agentsForFilters(data, f.agent, f.pe);
-  let modules = data.modules;
-  if (f.month) {
-    modules = modules.filter((m) => {
-      const earliest = data.module_dates[m];
-      return Boolean(earliest && earliest.startsWith(f.month));
-    });
-  }
-  if (f.search) {
-    modules = modules.filter((m) =>
-      m.toLowerCase().includes(f.search)
-    );
-  }
+  const agents = filterAgentsList(data, f);
+  const modules = filterModulesForViews(data, f);
 
   if (!modules.length) {
     return (
       <div className="no-data">No modules match your filters.</div>
+    );
+  }
+
+  if (!agents.length) {
+    return (
+      <div className="no-data">No agents match your filters.</div>
     );
   }
 
@@ -520,13 +576,8 @@ function renderAgents(
   data: ProcessedDashboardData,
   f: DashboardFilters
 ): ReactNode {
-  const agents = agentsForFilters(data, f.agent, f.pe);
-  let modules = data.modules;
-  if (f.month) {
-    modules = modules.filter((m) =>
-      data.module_dates[m]?.startsWith(f.month)
-    );
-  }
+  const agents = filterAgentsList(data, f);
+  const modules = filterModulesForViews(data, f);
 
   const today = new Date().toISOString().slice(0, 10);
   const scoreMap = data._raw_scores ?? {};
@@ -581,7 +632,7 @@ function renderAgents(
 
   return (
     <div className="agent-wrap">
-      <table className="agent-table">
+      <table className="agent-table agent-table-fixed">
         <thead>
           <tr>
             <th>Agent</th>
@@ -707,13 +758,8 @@ function renderOverdue(
   data: ProcessedDashboardData,
   f: DashboardFilters
 ): ReactNode {
-  const agents = agentsForFilters(data, f.agent, f.pe);
-  let modules = data.modules;
-  if (f.month) {
-    modules = modules.filter((m) =>
-      data.module_dates[m]?.startsWith(f.month)
-    );
-  }
+  const agents = filterAgentsList(data, f);
+  const modules = filterModulesForViews(data, f);
 
   const today = new Date().toISOString().slice(0, 10);
   const todayWeek = getWeekStart(today);
@@ -840,13 +886,8 @@ function renderLowScores(
   data: ProcessedDashboardData,
   f: DashboardFilters
 ): ReactNode {
-  const agents = agentsForFilters(data, f.agent, f.pe);
-  let modules = data.modules;
-  if (f.month) {
-    modules = modules.filter((m) =>
-      data.module_dates[m]?.startsWith(f.month)
-    );
-  }
+  const agents = filterAgentsList(data, f);
+  const modules = filterModulesForViews(data, f);
 
   const scoreMap = data._raw_scores ?? {};
   const lowList: {
@@ -860,7 +901,7 @@ function renderLowScores(
   agents.forEach((a) => {
     modules.forEach((mod) => {
       if (!data.agent_modules[a]?.[mod]) return;
-                  const s = scoreMap[a]?.[mod];
+      const s = scoreMap[a]?.[mod];
       if (s === undefined || s >= LOW_SCORE_THRESHOLD) return;
       lowList.push({
         agent: a,
@@ -960,6 +1001,60 @@ function renderLowScores(
   );
 }
 
+/** Static help — same as HTML “How to use” intent; no `DATA` required. */
+function renderHowTo(): ReactNode {
+  return (
+    <div className="howto-wrap">
+      <h2 className="howto-title">How to use this dashboard</h2>
+      <p className="howto-lead">
+        This tool reads Uplimit CSV exports and shows completion, pacing, scores,
+        and roster checks in one place. You do not need to edit the CSV by hand.
+      </p>
+      <ol className="howto-list">
+        <li>
+          <strong>Build from CSV.</strong> On first load, enter an optional program
+          name and upload your report (one or more files merge automatically).
+        </li>
+        <li>
+          <strong>Overview.</strong> See assignment totals, completion rate by
+          module (progress bars), average score pills, and how many people are
+          missing each module.
+        </li>
+        <li>
+          <strong>Day-over-Day &amp; By Module.</strong> Spot activity clusters
+          and drill into module × agent coverage. Use the <strong>Module</strong>{" "}
+          multi-select (with search) to narrow which modules appear.
+        </li>
+        <li>
+          <strong>Agent Summary.</strong> Sorted worst-to-best by % complete, with
+          last activity, manager (when <code>PE Name</code> is in the export), and
+          a status badge.
+        </li>
+        <li>
+          <strong>Overdue &amp; Low Scores.</strong> Prioritize modules released
+          in a prior week that are still open, and completions under 80%.
+        </li>
+        <li>
+          <strong>Roster Gaps.</strong> Paste your roster (one name per line,
+          matching Uplimit) to find who is missing from the report or listed
+          without activity.
+        </li>
+        <li>
+          <strong>Filters.</strong> Each of Agent, Month, Module, Manager (
+          <code>PE_NAME</code>), and Team (<code>GROUP_NAME</code>) is a
+          multi-select with search and <strong>Select All</strong>. An agent
+          matches Team if <em>any</em> of their groups is checked. Exports use
+          the same scope.
+        </li>
+      </ol>
+      <p className="howto-foot">
+        Tip: Re-upload anytime with <strong>Load New Report</strong> — the
+        dashboard refreshes from the new file(s).
+      </p>
+    </div>
+  );
+}
+
 type TabId =
   | "overview"
   | "daily"
@@ -967,7 +1062,8 @@ type TabId =
   | "agents"
   | "overdue"
   | "lowscore"
-  | "roster";
+  | "roster"
+  | "howto";
 
 type TooltipState = { text: string; x: number; y: number } | null;
 
@@ -988,6 +1084,8 @@ function normalizeLoadedData(raw: unknown): ProcessedDashboardData {
     all_dates: d.all_dates ?? [],
     pe_names: d.pe_names ?? [],
     agent_pe: d.agent_pe ?? {},
+    group_names: d.group_names ?? [],
+    agent_groups: d.agent_groups ?? {},
     _raw_scores: normalizeRawScores(d._raw_scores),
   });
 }
@@ -1005,7 +1103,6 @@ export function TrainingDashboard({
   const [setupTexts, setSetupTexts] = useState<string[]>([]);
   const [setupLoadedLabel, setSetupLoadedLabel] = useState("");
   const [setupDrag, setSetupDrag] = useState(false);
-  const [rosterFileLabel, setRosterFileLabel] = useState("");
 
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadDrag, setUploadDrag] = useState(false);
@@ -1013,10 +1110,8 @@ export function TrainingDashboard({
   const [exportType, setExportType] = useState<ExportType>("daily");
 
   const [activeTab, setActiveTab] = useState<TabId>("overview");
-  const [agentFilter, setAgentFilter] = useState("");
-  const [monthFilter, setMonthFilter] = useState("");
-  const [moduleSearch, setModuleSearch] = useState("");
-  const [peFilter, setPeFilter] = useState("");
+  /** Picklist engine: open/search/selected per filter id */
+  const [_pl, setPl] = useState(() => initialPicklistState());
   const [rosterText, setRosterText] = useState("");
   const [rosterResults, setRosterResults] = useState<ReactNode>(null);
 
@@ -1025,7 +1120,6 @@ export function TrainingDashboard({
 
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const setupReportInputRef = useRef<HTMLInputElement>(null);
-  const setupRosterInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (readOnly || initialToken) return;
@@ -1066,6 +1160,29 @@ export function TrainingDashboard({
     if (!data?.program_name) return;
     document.title = data.program_name + " Dashboard";
   }, [data?.program_name]);
+
+  useEffect(() => {
+    if (!data) return;
+    setPl(initialPicklistState());
+  }, [data]);
+
+  useEffect(() => {
+    const close = (e: MouseEvent) => {
+      const el = e.target as HTMLElement;
+      if (el.closest?.(".picklist-wrap")) return;
+      setPl((p) => {
+        let changed = false;
+        const n = { ...p };
+        (Object.keys(n) as PicklistId[]).forEach((k) => {
+          if (n[k].open) changed = true;
+          n[k] = { ...n[k], open: false };
+        });
+        return changed ? n : p;
+      });
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, []);
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
@@ -1132,7 +1249,7 @@ export function TrainingDashboard({
       if (!d) {
         alert(
           "No data could be loaded from that file.\n\n" +
-            "Use a comma-separated CSV with these columns: Full Name (or FULL_NAME), Content Week Name, Latest Submission Time; optional PE Name and Total Points.\n\n" +
+            "Use a comma-separated CSV with these columns: Full Name (or FULL_NAME), Content Week Name, Latest Submission Time; optional PE Name, GROUP_NAME, and Total Points.\n\n" +
             "If you exported from Excel, use “CSV UTF-8”. A UTF-8 BOM at the start of the file is fine."
         );
         return;
@@ -1170,14 +1287,6 @@ export function TrainingDashboard({
     await onSetupFiles(list);
   };
 
-  const onSetupRosterChange = async (files: FileList | null) => {
-    const f = files?.[0];
-    if (!f) return;
-    const text = await readFilesAsText([f]).then((x) => x[0]);
-    setRosterText(parseRosterFromText(text));
-    setRosterFileLabel(`✓ Roster loaded: ${f.name}`);
-  };
-
   const onUploadFiles = async (files: File[] | FileList | null) => {
     const arr = files ? Array.from(files) : [];
     if (!arr.length) return;
@@ -1188,15 +1297,109 @@ export function TrainingDashboard({
     await processAndApply(texts, programName);
   };
 
+  const monthKeys = useMemo(() => {
+    if (!data?.all_dates.length) return [];
+    return [...new Set(data.all_dates.map((d) => d.slice(0, 7)))].sort();
+  }, [data]);
+
   const filters: DashboardFilters = useMemo(
     () => ({
-      agent: agentFilter,
-      month: monthFilter,
-      search: moduleSearch.trim().toLowerCase(),
-      pe: peFilter,
+      agents: _pl.agent.selected,
+      months: _pl.month.selected,
+      modules: _pl.module.selected,
+      managers: _pl.manager.selected,
+      teams: _pl.team.selected,
     }),
-    [agentFilter, monthFilter, moduleSearch, peFilter]
+    [_pl]
   );
+
+  const exportFilters: ExportFilters = useMemo(
+    () => ({
+      agents: filters.agents,
+      months: filters.months,
+      modules: filters.modules,
+      managers: filters.managers,
+      teams: filters.teams,
+    }),
+    [filters]
+  );
+
+  const togglePicklist = useCallback((id: PicklistId) => {
+    setPl((p) => {
+      const willOpen = !p[id].open;
+      const n = { ...p };
+      (Object.keys(n) as PicklistId[]).forEach((k) => {
+        n[k] = { ...n[k], open: k === id ? willOpen : false };
+      });
+      return n;
+    });
+  }, []);
+
+  const setPicklistSearchField = useCallback((id: PicklistId, search: string) => {
+    setPl((p) => ({ ...p, [id]: { ...p[id], search } }));
+  }, []);
+
+  const toggleAllPicklistHandler = useCallback(
+    (id: PicklistId) => (e: React.SyntheticEvent) => {
+      e.stopPropagation();
+      if (!data) return;
+      const all = picklistAllValues(id, data, monthKeys);
+      setPl((p) => {
+        const cur = p[id].selected;
+        const nextSel = toggleAllPicklist(cur, all);
+        return { ...p, [id]: { ...p[id], selected: nextSel } };
+      });
+    },
+    [data, monthKeys]
+  );
+
+  const togglePicklistItemHandler = useCallback(
+    (id: PicklistId, val: string, checked: boolean) => {
+      if (!data) return;
+      const all = picklistAllValues(id, data, monthKeys);
+      setPl((p) => {
+        const cur = p[id].selected;
+        const nextSel = applyPicklistItemToggle(cur, val, checked, all);
+        return { ...p, [id]: { ...p[id], selected: nextSel } };
+      });
+    },
+    [data, monthKeys]
+  );
+
+  const buildPicklist = (
+    id: PicklistId,
+    label: string,
+    allLabel: string,
+    noneLabel: string,
+    format?: (v: string) => string
+  ) => {
+    if (!data) return null;
+    const all = picklistAllValues(id, data, monthKeys);
+    const slice = _pl[id];
+    return (
+      <FilterPicklist
+        label={label}
+        buttonLabel={picklistButtonLabel(
+          slice.selected,
+          all,
+          allLabel,
+          noneLabel,
+          format
+        )}
+        allValues={all}
+        selected={slice.selected}
+        open={slice.open}
+        search={slice.search}
+        onToggleOpen={() => togglePicklist(id)}
+        onSearchChange={(s) => setPicklistSearchField(id, s)}
+        onToggleAll={toggleAllPicklistHandler(id)}
+        onToggleItem={(val, checked) =>
+          togglePicklistItemHandler(id, val, checked)
+        }
+        formatOption={format}
+      />
+    );
+  };
 
   const dateRangeLabel = useMemo(() => {
     if (!data?.all_dates.length) return "—";
@@ -1207,38 +1410,46 @@ export function TrainingDashboard({
 
   const stats = useMemo(() => {
     if (!data) return null;
-    const total = data.agents.length;
-    const totalMods = data.modules.length;
-    let totalCompletions = 0;
-    data.agents.forEach((a) => {
-      totalCompletions += Object.keys(data.agent_modules[a] || {}).length;
+    const agents = data.agents;
+    const modules = data.modules;
+    let completions = 0;
+    agents.forEach((a) => {
+      completions += Object.keys(data.agent_modules[a] || {}).length;
     });
-    const avgPct =
-      total && totalMods
-        ? Math.round((totalCompletions / (total * totalMods)) * 100)
-        : 0;
-    const cutoff =
-      data.all_dates[data.all_dates.length - 8] || data.all_dates[0];
-    const recentActive = data.agents.filter((a) => {
-      const days = data.agent_daily[a] || {};
-      return Object.keys(days).some((d) => d >= cutoff);
-    }).length;
-    return { total, totalMods, totalCompletions, avgPct, recentActive };
-  }, [data]);
+    const slots = agents.length * modules.length;
+    const overallPct =
+      slots > 0 ? Math.round((completions / slots) * 100) : 0;
 
-  const monthOptions = useMemo(() => {
-    if (!data) return [];
-    const months = [
-      ...new Set(data.all_dates.map((d) => d.slice(0, 7))),
-    ].sort();
-    return months.map((m) => {
-      const [y, mo] = m.split("-");
-      const label = new Date(Number(y), Number(mo) - 1).toLocaleString(
-        "default",
-        { month: "long", year: "numeric" }
-      );
-      return { value: m, label };
+    const today = new Date().toISOString().slice(0, 10);
+    const todayWeek = getWeekStart(today);
+    let overdue = 0;
+    agents.forEach((a) => {
+      modules.forEach((mod) => {
+        if (data.agent_modules[a]?.[mod]) return;
+        const relDate = data.module_dates[mod];
+        if (!relDate) return;
+        if (getWeekStart(relDate) >= todayWeek) return;
+        overdue++;
+      });
     });
+
+    const scoreMap = data._raw_scores ?? {};
+    let lowScores = 0;
+    agents.forEach((a) => {
+      modules.forEach((mod) => {
+        if (!data.agent_modules[a]?.[mod]) return;
+        const s = scoreMap[a]?.[mod];
+        if (s !== undefined && s < LOW_SCORE_THRESHOLD) lowScores++;
+      });
+    });
+
+    return {
+      agents: agents.length,
+      completions,
+      overallPct,
+      overdue,
+      lowScores,
+    };
   }, [data]);
 
   const overviewPane = useMemo(() => {
@@ -1294,6 +1505,8 @@ export function TrainingDashboard({
     }
     return renderLowScores(data, filters);
   }, [data, filters]);
+
+  const howtoPane = useMemo(() => renderHowTo(), []);
 
   const applyRoster = () => {
     if (!data) return;
@@ -1382,8 +1595,8 @@ export function TrainingDashboard({
 
   const runExport = () => {
     if (!data) return;
-    const csv = buildExportCsv(data, filters, exportType);
-    const filename = exportFilename(data, exportType, monthFilter);
+    const csv = buildExportCsv(data, exportFilters, exportType);
+    const filename = exportFilename(data, exportType, filters.months);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -1408,39 +1621,84 @@ export function TrainingDashboard({
 
   const exportScopeChips = useMemo(() => {
     const chips: ReactNode[] = [];
-    if (filters.agent) {
+    const af = filters.agents;
+    if (af === null) {
       chips.push(
         <span key="a" className="scope-chip active">
-          {filters.agent}
-        </span>
-      );
-    } else {
-      chips.push(
-        <span key="all" className="scope-chip active">
           All Agents
         </span>
       );
-    }
-    if (filters.month) {
-      const [y, mo] = filters.month.split("-");
-      const label = new Date(Number(y), Number(mo) - 1).toLocaleString(
-        "default",
-        { month: "long", year: "numeric" }
-      );
+    } else if (af.length === 0) {
       chips.push(
-        <span key="m" className="scope-chip active">
-          {label}
+        <span key="a" className="scope-chip active">
+          No agents
+        </span>
+      );
+    } else if (af.length === 1) {
+      chips.push(
+        <span key="a" className="scope-chip active">
+          {af[0]}
         </span>
       );
     } else {
       chips.push(
-        <span key="am" className="scope-chip active">
+        <span key="a" className="scope-chip active">
+          {af.length} agents
+        </span>
+      );
+    }
+    const mf = filters.months;
+    if (mf === null) {
+      chips.push(
+        <span key="m" className="scope-chip active">
           All Months
+        </span>
+      );
+    } else if (mf.length === 0) {
+      chips.push(
+        <span key="m" className="scope-chip active">
+          No months
+        </span>
+      );
+    } else if (mf.length === 1) {
+      chips.push(
+        <span key="m" className="scope-chip active">
+          {formatMonthKey(mf[0]!)}
+        </span>
+      );
+    } else {
+      chips.push(
+        <span key="m" className="scope-chip active">
+          {mf.length} months
+        </span>
+      );
+    }
+    const tf = filters.teams;
+    if (tf !== null && tf.length > 0) {
+      chips.push(
+        <span key="team" className="scope-chip active">
+          {tf.length === 1 ? tf[0] : `${tf.length} teams`}
+        </span>
+      );
+    }
+    const pf = filters.managers;
+    if (pf !== null && pf.length > 0) {
+      chips.push(
+        <span key="mgr" className="scope-chip active">
+          {pf.length === 1 ? pf[0] : `${pf.length} managers`}
+        </span>
+      );
+    }
+    const modf = filters.modules;
+    if (modf !== null && modf.length > 0 && modf.length < (data?.modules.length ?? 0)) {
+      chips.push(
+        <span key="mod" className="scope-chip active">
+          {modf.length} modules
         </span>
       );
     }
     return chips;
-  }, [filters.agent, filters.month]);
+  }, [data?.modules.length, filters]);
 
   const showSetup = !readOnly && !data;
 
@@ -1526,7 +1784,7 @@ export function TrainingDashboard({
                 </div>
                 <div className="setup-drop-sub">
                   Full Name, Content Week Name, Latest Submission Time, PE Name,
-                  Total Points
+                  GROUP_NAME, Total Points
                 </div>
               </div>
               <input
@@ -1540,35 +1798,6 @@ export function TrainingDashboard({
               {setupLoadedLabel ? (
                 <div className="setup-file-loaded">{setupLoadedLabel}</div>
               ) : null}
-            </div>
-            <div className="setup-divider">
-              <span>optional</span>
-            </div>
-            <div className="setup-section setup-roster-section">
-              <label>Agent roster file</label>
-              <div
-                className="setup-drop"
-                onClick={() => setupRosterInputRef.current?.click()}
-                role="presentation"
-              >
-                <div className="setup-drop-label">
-                  <strong>CSV or plain list</strong> — prefill Roster Gaps tab
-                </div>
-              </div>
-              <input
-                ref={setupRosterInputRef}
-                type="file"
-                accept=".csv,.txt"
-                style={{ display: "none" }}
-                onChange={(e) => void onSetupRosterChange(e.target.files)}
-              />
-              {rosterFileLabel ? (
-                <div className="roster-file-loaded">{rosterFileLabel}</div>
-              ) : null}
-              <p className="setup-hint">
-                Expected columns include <code>Full Name</code> or one name per
-                line.
-              </p>
             </div>
             <div className="setup-footer">
               <span
@@ -1590,17 +1819,8 @@ export function TrainingDashboard({
                 Build Dashboard
               </button>
             </div>
+            <div className="howto-wrap howto-wrap--setup">{renderHowTo()}</div>
           </div>
-        </div>
-        <div
-          className={`tooltip-box${tooltip ? " visible" : ""}`}
-          style={
-            tooltip
-              ? { left: tooltip.x, top: tooltip.y, display: "block" }
-              : undefined
-          }
-        >
-          {tooltip?.text}
         </div>
       </>
     );
@@ -1720,7 +1940,7 @@ export function TrainingDashboard({
           </div>
           <div className="export-footer">
             <span className="export-filename">
-              {exportFilename(data, exportType, monthFilter)}
+              {exportFilename(data, exportType, filters.months)}
             </span>
             <button
               type="button"
@@ -1782,33 +2002,33 @@ export function TrainingDashboard({
           <>
             <div className="stat">
               <div className="stat-val" style={{ color: "var(--guava)" }}>
-                {stats.total}
+                {stats.agents}
               </div>
-              <div className="stat-label">Agents in Report</div>
-            </div>
-            <div className="stat">
-              <div className="stat-val" style={{ color: "var(--kale)" }}>
-                {stats.totalMods}
-              </div>
-              <div className="stat-label">Total Modules</div>
+              <div className="stat-label">Agents</div>
             </div>
             <div className="stat">
               <div className="stat-val" style={{ color: "var(--ink)" }}>
-                {stats.totalCompletions.toLocaleString()}
+                {stats.completions.toLocaleString()}
               </div>
-              <div className="stat-label">Total Completions</div>
+              <div className="stat-label">Completions</div>
             </div>
             <div className="stat">
               <div className="stat-val" style={{ color: "var(--kale)" }}>
-                {stats.avgPct}%
+                {stats.overallPct}%
               </div>
-              <div className="stat-label">Avg Coverage</div>
+              <div className="stat-label">Overall Coverage</div>
             </div>
             <div className="stat">
-              <div className="stat-val" style={{ color: "var(--guava)" }}>
-                {stats.recentActive}
+              <div className="stat-val" style={{ color: "var(--danger)" }}>
+                {stats.overdue.toLocaleString()}
               </div>
-              <div className="stat-label">Active Recently</div>
+              <div className="stat-label">Overdue</div>
+            </div>
+            <div className="stat">
+              <div className="stat-val" style={{ color: "var(--warn)" }}>
+                {stats.lowScores.toLocaleString()}
+              </div>
+              <div className="stat-label">Low Scores</div>
             </div>
           </>
         )}
@@ -1824,6 +2044,7 @@ export function TrainingDashboard({
             { id: "overdue" as const, label: "🔴 Overdue" },
             { id: "lowscore" as const, label: "🟡 Low Scores" },
             { id: "roster" as const, label: "👥 Roster Gaps" },
+            { id: "howto" as const, label: "📖 How to Use" },
           ] as const
         ).map(({ id, label }) => (
           <div
@@ -1863,59 +2084,26 @@ export function TrainingDashboard({
       </div>
 
       <div className="filter-bar">
-        <label htmlFor="agentFilter">Agent</label>
-        <select
-          id="agentFilter"
-          value={agentFilter}
-          onChange={(e) => setAgentFilter(e.target.value)}
-        >
-          <option value="">All Agents</option>
-          {data.agents.map((a) => (
-            <option key={a} value={a}>
-              {a}
-            </option>
-          ))}
-        </select>
+        {buildPicklist("agent", "Agent", "All Agents", "No agents")}
         <div className="filter-sep" />
-        <label htmlFor="monthFilter">Month</label>
-        <select
-          id="monthFilter"
-          value={monthFilter}
-          onChange={(e) => setMonthFilter(e.target.value)}
-        >
-          <option value="">All Months</option>
-          {monthOptions.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
+        {buildPicklist("month", "Month", "All Months", "No months", formatMonthKey)}
         <div className="filter-sep" />
-        <label htmlFor="moduleSearch">Search Module</label>
-        <input
-          id="moduleSearch"
-          type="text"
-          placeholder="e.g. W-2, Payroll…"
-          style={{ width: 180 }}
-          value={moduleSearch}
-          onChange={(e) => setModuleSearch(e.target.value)}
-        />
+        {buildPicklist("module", "Module", "All modules", "No modules")}
+        {data.group_names.length > 0 && (
+          <>
+            <div className="filter-sep" />
+            {buildPicklist("team", "Team", "All teams", "No teams")}
+          </>
+        )}
         {data.pe_names.length > 0 && (
           <>
             <div className="filter-sep" />
-            <label htmlFor="peFilter">Manager</label>
-            <select
-              id="peFilter"
-              value={peFilter}
-              onChange={(e) => setPeFilter(e.target.value)}
-            >
-              <option value="">All Managers</option>
-              {data.pe_names.map((pe) => (
-                <option key={pe} value={pe}>
-                  {pe}
-                </option>
-              ))}
-            </select>
+            {buildPicklist(
+              "manager",
+              "Manager",
+              "All managers",
+              "No managers"
+            )}
           </>
         )}
       </div>
@@ -1990,6 +2178,12 @@ export function TrainingDashboard({
             <div id="rosterResults">{rosterResults}</div>
           </div>
         </div>
+        <div
+          className={`tab-pane${activeTab === "howto" ? " active" : ""}`}
+          id="pane-howto"
+        >
+          {howtoPane}
+        </div>
       </div>
 
       <div
@@ -2005,3 +2199,11 @@ export function TrainingDashboard({
     </>
   );
 }
+
+/** HTML-aligned helpers (also in `@/lib/dashboardHelpers`). */
+export {
+  daysSince,
+  getWeekStart,
+  progFillClass,
+  scorePillClass,
+} from "@/lib/dashboardHelpers";

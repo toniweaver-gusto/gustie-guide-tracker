@@ -1,10 +1,11 @@
 import type { ProcessedDashboardData } from "./types";
 
 export type ExportFilters = {
-  agent: string;
-  month: string;
-  search: string;
-  pe: string;
+  agents: string[] | null;
+  months: string[] | null;
+  modules: string[] | null;
+  managers: string[] | null;
+  teams: string[] | null;
 };
 
 export type ExportType = "daily" | "modules" | "log";
@@ -25,9 +26,55 @@ function agentsForFilters(
   data: ProcessedDashboardData,
   f: ExportFilters
 ): string[] {
-  if (f.agent) return [f.agent];
-  if (f.pe) return data.agents.filter((a) => data.agent_pe[a] === f.pe);
-  return data.agents;
+  let list = [...data.agents];
+  if (f.agents !== null) {
+    if (f.agents.length === 0) return [];
+    list = list.filter((a) => f.agents!.includes(a));
+  }
+  if (f.managers !== null) {
+    if (f.managers.length === 0) return [];
+    list = list.filter((a) =>
+      f.managers!.some((pe) => data.agent_pe[a] === pe)
+    );
+  }
+  if (f.teams !== null) {
+    if (f.teams.length === 0) return [];
+    list = list.filter((a) => {
+      const gs = data.agent_groups[a] ?? [];
+      return f.teams!.some((t) => gs.includes(t));
+    });
+  }
+  return list;
+}
+
+function modulesForFilters(
+  data: ProcessedDashboardData,
+  f: ExportFilters
+): string[] {
+  let modules = [...data.modules];
+  if (f.months !== null) {
+    if (f.months.length === 0) return [];
+    modules = modules.filter((m) => {
+      const rd = data.module_dates[m];
+      return Boolean(rd && f.months!.some((mo) => rd.startsWith(mo)));
+    });
+  }
+  if (f.modules !== null) {
+    if (f.modules.length === 0) return [];
+    modules = modules.filter((m) => f.modules!.includes(m));
+  }
+  return modules;
+}
+
+function datesForFilters(
+  data: ProcessedDashboardData,
+  f: ExportFilters
+): string[] {
+  if (f.months === null) return [...data.all_dates];
+  if (f.months.length === 0) return [];
+  return data.all_dates.filter((d) =>
+    f.months!.some((mo) => d.startsWith(mo))
+  );
 }
 
 export function buildExportCsv(
@@ -36,19 +83,10 @@ export function buildExportCsv(
   type: ExportType
 ): string {
   const agents = agentsForFilters(data, f);
-  let modules = data.modules;
-  if (f.month)
-    modules = modules.filter((m) =>
-      data.module_dates[m]?.startsWith(f.month)
-    );
-  if (f.search)
-    modules = modules.filter((m) =>
-      m.toLowerCase().includes(f.search.toLowerCase())
-    );
+  const modules = modulesForFilters(data, f);
 
   if (type === "daily") {
-    let dates = data.all_dates;
-    if (f.month) dates = dates.filter((d) => d.startsWith(f.month));
+    const dates = datesForFilters(data, f);
     const header = ["Agent", ...dates, "Total Modules Completed"];
     const rows: string[][] = [header];
     agents.forEach((a) => {
@@ -87,7 +125,6 @@ export function buildExportCsv(
     return buildCSV(rows);
   }
 
-  // log
   const header = [
     "Agent",
     "Module",
@@ -99,12 +136,11 @@ export function buildExportCsv(
   agents.forEach((a) => {
     const completions = data.agent_modules[a] || {};
     Object.entries(completions).forEach(([mod, completedDate]) => {
-      if (f.month && !completedDate.startsWith(f.month)) return;
-      if (
-        f.search &&
-        !mod.toLowerCase().includes(f.search.toLowerCase())
-      )
-        return;
+      if (!modules.includes(mod)) return;
+      if (f.months !== null) {
+        if (f.months.length === 0) return;
+        if (!f.months.some((mo) => completedDate.startsWith(mo))) return;
+      }
       const releaseDate = data.module_dates[mod] || "";
       let daysDiff = "";
       if (releaseDate && completedDate) {
@@ -125,7 +161,7 @@ export function buildExportCsv(
 export function exportFilename(
   data: ProcessedDashboardData,
   type: ExportType,
-  month: string
+  months: string[] | null
 ): string {
   const prog = data.program_name.toLowerCase().replace(/\s+/g, "-");
   const names: Record<ExportType, string> = {
@@ -133,6 +169,7 @@ export function exportFilename(
     modules: prog + "-module-matrix",
     log: prog + "-completion-log",
   };
-  const suffix = month ? "-" + month : "";
+  const suffix =
+    months && months.length === 1 ? "-" + months[0] : "";
   return names[type] + suffix + ".csv";
 }

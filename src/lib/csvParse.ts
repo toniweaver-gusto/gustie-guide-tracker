@@ -1,4 +1,5 @@
 import type { ProcessedDashboardData } from "./types";
+import { normalizeRawScores } from "./sanitizeProcessedData";
 
 export type RawCSVRow = Record<string, string>;
 
@@ -9,8 +10,8 @@ export function stripBom(text: string): string {
 }
 
 /**
- * Normalizes CSV header labels so FULL_NAME, Full Name, etc. match the same key
- * (lowercase, underscores → spaces, collapsed whitespace).
+ * Normalizes CSV header labels: trim, strip quotes, lowercase, underscores → spaces.
+ * Collapses whitespace so multi-space headers still resolve (e.g. "Full  Name").
  */
 export function normalizeHeader(h: string): string {
   return stripBom(h)
@@ -107,6 +108,7 @@ type ColumnIndices = {
   latestSub: number;
   peName: number;
   totalPoints: number;
+  groupName: number;
 };
 
 function resolveColumnIndices(headers: string[]): ColumnIndices | null {
@@ -118,7 +120,8 @@ function resolveColumnIndices(headers: string[]): ColumnIndices | null {
   if (fullName < 0 || contentWeek < 0 || latestSub < 0) return null;
   const peName = want("pe name");
   const totalPoints = want("total points");
-  return { fullName, contentWeek, latestSub, peName, totalPoints };
+  const groupName = want("group name");
+  return { fullName, contentWeek, latestSub, peName, totalPoints, groupName };
 }
 
 /**
@@ -158,15 +161,37 @@ export function parseCSVRows(text: string): RawCSVRow[] {
     const vals = splitCSVLine(lines[i]);
     const row: RawCSVRow = {};
     headers.forEach((h, j) => {
-      row[h] = (vals[j] ?? "").trim();
+      row[h] = (vals[j] ?? "").trim().replace(/^"|"$/g, "");
     });
-    row["Full Name"] = (vals[colIx.fullName] ?? "").trim();
-    row["Content Week Name"] = (vals[colIx.contentWeek] ?? "").trim();
-    row["Latest Submission Time"] = (vals[colIx.latestSub] ?? "").trim();
+    // Canonical keys (matches HTML `row['Full Name']` etc.); supports FULL_NAME / Full Name via indices
+    row["Full Name"] = (vals[colIx.fullName] ?? "")
+      .trim()
+      .replace(/^"|"$/g, "");
+    row["Content Week Name"] = (vals[colIx.contentWeek] ?? "")
+      .trim()
+      .replace(/^"|"$/g, "");
+    row["Latest Submission Time"] = (vals[colIx.latestSub] ?? "")
+      .trim()
+      .replace(/^"|"$/g, "");
     row["PE Name"] =
-      colIx.peName >= 0 ? (vals[colIx.peName] ?? "").trim() : "";
+      colIx.peName >= 0
+        ? (vals[colIx.peName] ?? "").trim().replace(/^"|"$/g, "")
+        : "";
     row["Total Points"] =
-      colIx.totalPoints >= 0 ? (vals[colIx.totalPoints] ?? "").trim() : "";
+      colIx.totalPoints >= 0
+        ? (vals[colIx.totalPoints] ?? "").trim().replace(/^"|"$/g, "")
+        : "";
+    row["Group Name"] =
+      colIx.groupName >= 0
+        ? (vals[colIx.groupName] ?? "").trim().replace(/^"|"$/g, "")
+        : "";
+    // Aliases for underscore-heavy exports (same values as canonical keys above)
+    row["FULL_NAME"] = row["Full Name"];
+    row["CONTENT_WEEK_NAME"] = row["Content Week Name"];
+    row["LATEST_SUBMISSION_TIME"] = row["Latest Submission Time"];
+    row["TOTAL_POINTS"] = row["Total Points"];
+    row["PE_NAME"] = row["PE Name"];
+    row["GROUP_NAME"] = row["Group Name"];
     rows.push(row);
   }
   return rows;
@@ -183,19 +208,26 @@ export function processCSVTexts(
   if (!allRows.length) return null;
 
   const peMap: Record<string, string> = {};
+  const groupSets: Record<string, Set<string>> = {};
   allRows.forEach((row) => {
     const name = row["Full Name"];
     const pe = row["PE Name"];
     if (name && pe) peMap[name] = pe;
+    const g = row["Group Name"]?.trim();
+    if (name && g) {
+      if (!groupSets[name]) groupSets[name] = new Set();
+      groupSets[name].add(g);
+    }
   });
 
+  // Deduplicate by Full Name + Content Week Name — keep earliest submission date (HTML: ts.slice(0,10))
   const compMap: Record<string, Record<string, string>> = {};
   allRows.forEach((row) => {
     const name = row["Full Name"];
     const mod = row["Content Week Name"];
     const ts = row["Latest Submission Time"];
     if (!name || !mod || !ts) return;
-    const date = normalizeSubmissionDate(ts);
+    const date = ts.trim().slice(0, 10);
     if (!date) return;
     if (!compMap[name]) compMap[name] = {};
     if (!compMap[name][mod] || date < compMap[name][mod]) {
@@ -230,16 +262,27 @@ export function processCSVTexts(
 
   const peNames = [...new Set(Object.values(peMap))].filter(Boolean).sort();
 
-  const rawScores: Record<string, Record<string, number>> = {};
+  const groupNameSet = new Set<string>();
+  Object.values(groupSets).forEach((s) => {
+    s.forEach((g) => groupNameSet.add(g));
+  });
+  const group_names = [...groupNameSet].sort();
+
+  const agent_groups: Record<string, string[]> = {};
+  agents.forEach((a) => {
+    agent_groups[a] = groupSets[a] ? [...groupSets[a]].sort() : [];
+  });
+
+  // Score map: agent+module → best score (0–100), same keys as HTML (`name + '\0' + mod`)
+  const rawScoresFlat: Record<string, number> = {};
   allRows.forEach((row) => {
     const name = row["Full Name"];
     const mod = row["Content Week Name"];
     const score = parseFloat(row["Total Points"] || "0");
     if (!name || !mod || Number.isNaN(score)) return;
-    if (!rawScores[name]) rawScores[name] = {};
-    const byMod = rawScores[name];
-    if (byMod[mod] === undefined || score > byMod[mod]) {
-      byMod[mod] = score;
+    const key = name + "\0" + mod;
+    if (rawScoresFlat[key] === undefined || score > rawScoresFlat[key]) {
+      rawScoresFlat[key] = score;
     }
   });
 
@@ -252,8 +295,10 @@ export function processCSVTexts(
     all_dates: allDates,
     pe_names: peNames,
     agent_pe: peMap,
+    group_names,
+    agent_groups,
     program_name: programName || "Training Dashboard",
-    _raw_scores: rawScores,
+    _raw_scores: normalizeRawScores(rawScoresFlat),
   };
 }
 
