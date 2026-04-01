@@ -1,36 +1,32 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Gustie Guide Tracker (Vite + React)
 
-## Getting Started
+Static SPA for GitHub Pages. Supabase is called from the browser with the **anon** key and RPC functions (see `supabase/migrations/002_uplimit_dashboards_anon_rpc.sql`).
 
-First, run the development server:
+## Local dev
 
 ```bash
+cd web
+cp .env.example .env.local
+# Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open the URL Vite prints (usually `http://localhost:5173/`).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Production build
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run build
+npm run preview   # optional: test production bundle locally
+```
 
-## Learn More
+## GitHub Pages
 
-To learn more about Next.js, take a look at the following resources:
+- Repo name should be **`gustie-guide-tracker`** (or change `base` in `vite.config.ts` and `homepage` in `package.json` to match your repo).
+- Replace `YOUR-GITHUB-USERNAME` in `package.json` → `homepage`.
+- **Settings → Pages → Source:** GitHub Actions.
+- Add repository secrets: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`.
+- Run SQL migration `002_uplimit_dashboards_anon_rpc.sql` in the Supabase SQL editor.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Share links and assets use the `/gustie-guide-tracker/` base path in production builds only.
