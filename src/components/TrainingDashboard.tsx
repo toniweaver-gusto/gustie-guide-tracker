@@ -1001,56 +1001,176 @@ function renderLowScores(
   );
 }
 
-/** Static help — same as HTML “How to use” intent; no `DATA` required. */
+/** How to Use tab — static content (matches HTML design system + app features). */
 function renderHowTo(): ReactNode {
   return (
     <div className="howto-wrap">
-      <h2 className="howto-title">How to use this dashboard</h2>
-      <p className="howto-lead">
-        This tool reads Uplimit CSV exports and shows completion, pacing, scores,
-        and roster checks in one place. You do not need to edit the CSV by hand.
-      </p>
-      <ol className="howto-list">
-        <li>
-          <strong>Build from CSV.</strong> On first load, enter an optional program
-          name and upload your report (one or more files merge automatically).
-        </li>
-        <li>
-          <strong>Overview.</strong> See assignment totals, completion rate by
-          module (progress bars), average score pills, and how many people are
-          missing each module.
-        </li>
-        <li>
-          <strong>Day-over-Day &amp; By Module.</strong> Spot activity clusters
-          and drill into module × agent coverage. Use the <strong>Module</strong>{" "}
-          multi-select (with search) to narrow which modules appear.
-        </li>
-        <li>
-          <strong>Agent Summary.</strong> Sorted worst-to-best by % complete, with
-          last activity, manager (when <code>PE Name</code> is in the export), and
-          a status badge.
-        </li>
-        <li>
-          <strong>Overdue &amp; Low Scores.</strong> Prioritize modules released
-          in a prior week that are still open, and completions under 80%.
-        </li>
-        <li>
-          <strong>Roster Gaps.</strong> Paste your roster (one name per line,
-          matching Uplimit) to find who is missing from the report or listed
-          without activity.
-        </li>
-        <li>
-          <strong>Filters.</strong> Each of Agent, Month, Module, Manager (
-          <code>PE_NAME</code>), and Team (<code>GROUP_NAME</code>) is a
-          multi-select with search and <strong>Select All</strong>. An agent
-          matches Team if <em>any</em> of their groups is checked. Exports use
-          the same scope.
-        </li>
-      </ol>
-      <p className="howto-foot">
-        Tip: Re-upload anytime with <strong>Load New Report</strong> — the
-        dashboard refreshes from the new file(s).
-      </p>
+      <div className="howto-hero">
+        <div className="howto-hero-icon" aria-hidden>
+          📊
+        </div>
+        <div className="howto-hero-body">
+          <h2>Gustie Guide Training Dashboard</h2>
+          <p>
+            Track Uplimit training completion, pacing, scores, and roster
+            alignment in one place. Upload your cohort export, then explore tabs
+            and filters—no spreadsheet gymnastics required.
+          </p>
+        </div>
+      </div>
+
+      <section className="howto-section">
+        <h3 className="howto-section-title">Getting Started</h3>
+        <div className="howto-step">
+          <span className="howto-step-num">1</span>
+          <h4>Upload your report</h4>
+          <p>
+            On first launch, enter an optional <strong>Program name</strong>, then
+            upload one or more Uplimit CSV exports. Files merge automatically;
+            duplicate rows from group memberships are deduplicated by agent and
+            module.
+          </p>
+        </div>
+        <div className="howto-step">
+          <span className="howto-step-num">2</span>
+          <h4>Filter and explore</h4>
+          <p>
+            Use the multi-select picklists for <strong>Agent</strong>,{" "}
+            <strong>Month</strong>, <strong>Module</strong>, and—when your export
+            includes them—<strong>Team</strong> (<code>GROUP_NAME</code>) and{" "}
+            <strong>Manager</strong> (<code>PE_NAME</code>). Search inside each
+            list and use <strong>Select All</strong> to reset scope.
+          </p>
+        </div>
+        <div className="howto-step">
+          <span className="howto-step-num">3</span>
+          <h4>Share or refresh</h4>
+          <p>
+            Use <strong>Export CSV</strong> for filtered downloads. After the first
+            save, <strong>Copy share link</strong> gives managers a read-only
+            view. Use <strong>Load New Report</strong> anytime to replace data.
+          </p>
+        </div>
+      </section>
+
+      <section className="howto-section">
+        <h3 className="howto-section-title">What Each Tab Shows</h3>
+        <div className="howto-tabs-grid">
+          <div className="howto-tab-card">
+            <div className="howto-tab-card-icon">📊</div>
+            <h4>Overview</h4>
+            <p>
+              Assignment totals, completion rate by module with progress bars,
+              average score pills, and missing counts.
+            </p>
+          </div>
+          <div className="howto-tab-card">
+            <div className="howto-tab-card-icon">📅</div>
+            <h4>Day-over-Day</h4>
+            <p>
+              Calendar-style activity: how many modules each agent completed per
+              day, grouped by month.
+            </p>
+          </div>
+          <div className="howto-tab-card">
+            <div className="howto-tab-card-icon">📚</div>
+            <h4>By Module</h4>
+            <p>
+              Module × agent matrix with release dates, checkmarks for done, and a
+              coverage pill per row.
+            </p>
+          </div>
+          <div className="howto-tab-card">
+            <div className="howto-tab-card-icon">👤</div>
+            <h4>Agent Summary</h4>
+            <p>
+              Agents sorted worst-to-best by % complete, with done/missing counts,
+              avg score, last activity, manager, and status badge.
+            </p>
+          </div>
+          <div className="howto-tab-card">
+            <div className="howto-tab-card-icon">🔴</div>
+            <h4>Overdue</h4>
+            <p>
+              Open assignments where the module was released in a prior week—
+              sorted by most days overdue first.
+            </p>
+          </div>
+          <div className="howto-tab-card">
+            <div className="howto-tab-card-icon">🟡</div>
+            <h4>Low Scores</h4>
+            <p>
+              Completed modules with score below 80%, sorted lowest first for
+              coaching follow-up.
+            </p>
+          </div>
+          <div className="howto-tab-card">
+            <div className="howto-tab-card-icon">👥</div>
+            <h4>Roster Gaps</h4>
+            <p>
+              Paste a roster (one name per line) to find who is missing from the
+              report, who is extra, and who has zero activity.
+            </p>
+          </div>
+          <div className="howto-tab-card">
+            <div className="howto-tab-card-icon">📖</div>
+            <h4>How to Use</h4>
+            <p>
+              This reference: how the dashboard works and how to get the most from
+              each view.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="howto-section">
+        <h3 className="howto-section-title">Tips &amp; Common Questions</h3>
+        <div className="howto-tabs-grid howto-faq-grid">
+          <div className="howto-tab-card">
+            <h4>Why do row counts differ from raw CSV rows?</h4>
+            <p>
+              Uplimit repeats completions per group. The parser keeps the{" "}
+              <strong>earliest</strong> submission per agent + module so daily
+              totals and coverage are not inflated.
+            </p>
+          </div>
+          <div className="howto-tab-card">
+            <h4>Which columns are required?</h4>
+            <p>
+              At minimum: <code>Full Name</code> (or <code>FULL_NAME</code>),{" "}
+              <code>Content Week Name</code>, <code>Latest Submission Time</code>.
+              Optional: <code>PE_NAME</code>, <code>GROUP_NAME</code>,{" "}
+              <code>Total Points</code> for manager/team filters and scores.
+            </p>
+          </div>
+          <div className="howto-tab-card">
+            <h4>How does Team filtering work?</h4>
+            <p>
+              If <code>GROUP_NAME</code> is present, an agent matches when{" "}
+              <em>any</em> of their groups is selected—useful when someone sits on
+              multiple teams.
+            </p>
+          </div>
+          <div className="howto-tab-card">
+            <h4>What does “Overdue” mean?</h4>
+            <p>
+              A module is overdue if its release week (Monday-based) is before the
+              current week and the agent has not completed it yet.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <div className="howto-tip">
+        <strong>Weekly workflow</strong>
+        <p>
+          Export from Uplimit at the same time each week, upload with{" "}
+          <strong>Load New Report</strong>, skim <strong>Overview</strong> and{" "}
+          <strong>Overdue</strong>, then drill into <strong>Agent Summary</strong>{" "}
+          or <strong>Low Scores</strong> for 1:1s. Share the read-only link with
+          people leaders so everyone works from one source of truth.
+        </p>
+      </div>
     </div>
   );
 }
@@ -1743,11 +1863,11 @@ export function TrainingDashboard({
         >
           <div className="setup-card">
             <div className="setup-logo">gusto</div>
-            <h2>Welcome to the Training Dashboard</h2>
+            <h2>Gustie Guide Training Dashboard</h2>
             <p className="setup-intro">
               Upload your Uplimit CSV export (or several — they merge
-              automatically). Names are deduplicated by agent and module so group
-              rows don&apos;t inflate counts.
+              automatically). Completions are deduplicated by agent and module so
+              group rows don&apos;t inflate counts.
             </p>
             <div className="setup-section">
               <label htmlFor="setupProgramName">Program name (optional)</label>
@@ -1760,7 +1880,7 @@ export function TrainingDashboard({
               />
             </div>
             <div className="setup-section">
-              <label>Uplimit report CSV</label>
+              <label>Uplimit Report CSV</label>
               <div
                 className={`setup-drop${setupDrag ? " drag-over" : ""}`}
                 onDragOver={(e) => {
@@ -1780,13 +1900,20 @@ export function TrainingDashboard({
                 role="presentation"
               >
                 <div className="setup-drop-label">
-                  <strong>Click</strong> or drag CSV files here
+                  <strong>Click to upload</strong> or drag CSV files here
                 </div>
                 <div className="setup-drop-sub">
                   Full Name, Content Week Name, Latest Submission Time, PE Name,
                   GROUP_NAME, Total Points
                 </div>
               </div>
+              <p className="setup-hint">
+                Expected columns include <code>Full Name</code> (or{" "}
+                <code>FULL_NAME</code>), <code>Content Week Name</code>,{" "}
+                <code>Latest Submission Time</code>; optional{" "}
+                <code>PE_NAME</code>, <code>GROUP_NAME</code>,{" "}
+                <code>Total Points</code>. Use CSV UTF-8 from Excel if applicable.
+              </p>
               <input
                 ref={setupReportInputRef}
                 type="file"
@@ -1816,10 +1943,9 @@ export function TrainingDashboard({
                 disabled={!setupTexts.length}
                 onClick={() => void launchDashboard()}
               >
-                Build Dashboard
+                Build Dashboard →
               </button>
             </div>
-            <div className="howto-wrap howto-wrap--setup">{renderHowTo()}</div>
           </div>
         </div>
       </>

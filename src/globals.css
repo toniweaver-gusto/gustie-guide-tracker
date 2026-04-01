@@ -568,54 +568,149 @@ input[type="file"] { display: none; }
 .days-badge { font-family: var(--font-dm-mono), 'DM Mono', monospace; font-size: 0.65rem; color: var(--muted); }
 .days-badge.stale { color: var(--danger); font-weight: 600; }
 
-/* ── HOW TO USE ── */
+/* ── HOW TO USE TAB ── */
 .howto-wrap {
-  padding: 24px 32px;
-  max-width: 720px;
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 28px 32px 40px;
 }
-.howto-wrap--setup {
-  margin-top: 28px;
-  padding: 24px 0 0;
-  max-width: none;
-  border-top: 1px solid var(--border);
+.howto-hero {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px 28px;
+  margin-bottom: 32px;
 }
-.howto-title {
+.howto-hero-icon {
+  font-size: 2rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.howto-hero-body h2 {
   font-family: var(--font-playfair), 'Playfair Display', serif;
-  font-size: 1.1rem;
+  font-size: 1.35rem;
   font-weight: 700;
   color: var(--ink);
-  margin-bottom: 12px;
+  margin-bottom: 8px;
+  line-height: 1.2;
+}
+.howto-hero-body p {
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.65;
+}
+.howto-section { margin-bottom: 28px; }
+.howto-section-title {
+  font-family: var(--font-playfair), 'Playfair Display', serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 16px;
   padding-bottom: 8px;
   border-bottom: 2px solid var(--guava);
   display: inline-block;
 }
-.howto-lead {
-  font-size: 0.78rem;
-  color: var(--muted);
-  line-height: 1.65;
-  margin-bottom: 18px;
+.howto-step {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 18px 16px 52px;
+  margin-bottom: 12px;
 }
-.howto-list {
-  margin: 0 0 18px 1.1rem;
-  padding: 0;
-  font-size: 0.74rem;
+.howto-step-num {
+  position: absolute;
+  left: 14px;
+  top: 14px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--guava);
+  color: white;
+  font-family: var(--font-dm-sans), 'DM Sans', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+.howto-step h4 {
+  font-size: 0.82rem;
+  font-weight: 600;
   color: var(--ink);
-  line-height: 1.65;
+  margin-bottom: 6px;
 }
-.howto-list li { margin-bottom: 12px; }
-.howto-list strong { color: var(--ink); font-weight: 600; }
-.howto-list code {
-  font-family: var(--font-dm-mono), 'DM Mono', monospace;
+.howto-step p {
+  font-size: 0.72rem;
+  color: var(--muted);
+  line-height: 1.55;
+}
+.howto-tabs-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+@media (max-width: 720px) {
+  .howto-tabs-grid { grid-template-columns: 1fr; }
+}
+.howto-tabs-grid.howto-faq-grid {
+  grid-template-columns: 1fr;
+  max-width: 720px;
+}
+.howto-tab-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+.howto-tab-card-icon {
+  font-size: 1.1rem;
+  margin-bottom: 6px;
+  line-height: 1;
+}
+.howto-tab-card h4 {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 4px;
+}
+.howto-tab-card p {
   font-size: 0.68rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.howto-tab-card code {
+  font-family: var(--font-dm-mono), 'DM Mono', monospace;
+  font-size: 0.62rem;
   background: var(--bg);
   padding: 1px 5px;
   border-radius: 3px;
   border: 1px solid var(--border);
 }
-.howto-foot {
+.howto-tip {
+  background: var(--kale-dim);
+  border: 1px solid rgba(10, 128, 128, 0.22);
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin-top: 8px;
+}
+.howto-tip strong {
+  display: block;
+  font-family: var(--font-dm-sans), 'DM Sans', sans-serif;
   font-size: 0.72rem;
-  color: var(--muted);
-  line-height: 1.6;
+  font-weight: 700;
+  color: var(--kale);
+  margin-bottom: 8px;
+  letter-spacing: 0.02em;
+}
+.howto-tip p {
+  font-size: 0.72rem;
+  color: var(--ink);
+  line-height: 1.55;
 }
 
 /* ── MISC ── */
