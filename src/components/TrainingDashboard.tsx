@@ -45,6 +45,8 @@ import {
 } from "@/lib/picklistEngine";
 
 const SESSION_KEY = "uplimit_dashboard_token";
+const SESSION_TAB_KEY = "uplimit_dashboard_active_tab";
+const SESSION_DATA_KEY = "uplimit_dashboard_processed_data";
 
 /** Multi-select: `null` = all, `[]` = none, `[...]` = subset */
 export type DashboardFilters = {
@@ -1178,6 +1180,29 @@ type TabId =
   | "roster"
   | "howto";
 
+const VALID_TAB_IDS: readonly TabId[] = [
+  "overview",
+  "daily",
+  "modules",
+  "agents",
+  "overdue",
+  "lowscore",
+  "roster",
+  "howto",
+] as const;
+
+function parseStoredTab(): TabId {
+  try {
+    const s = sessionStorage.getItem(SESSION_TAB_KEY);
+    if (s && (VALID_TAB_IDS as readonly string[]).includes(s)) {
+      return s as TabId;
+    }
+  } catch {
+    /* ignore */
+  }
+  return "overview";
+}
+
 type TooltipState = { text: string; x: number; y: number } | null;
 
 type Props = {
@@ -1203,11 +1228,24 @@ function normalizeLoadedData(raw: unknown): ProcessedDashboardData {
   });
 }
 
+function readCachedProcessedData(): ProcessedDashboardData | null {
+  try {
+    const raw = sessionStorage.getItem(SESSION_DATA_KEY);
+    if (!raw) return null;
+    return normalizeLoadedData(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
 export function TrainingDashboard({
   readOnly = false,
   initialToken,
 }: Props) {
-  const [data, setData] = useState<ProcessedDashboardData | null>(null);
+  const [data, setData] = useState<ProcessedDashboardData | null>(() => {
+    if (readOnly || initialToken) return null;
+    return readCachedProcessedData();
+  });
   const [shareToken, setShareToken] = useState<string | null>(null);
   const [remoteLoading, setRemoteLoading] = useState(!!initialToken);
   const [remoteError, setRemoteError] = useState(false);
@@ -1222,7 +1260,7 @@ export function TrainingDashboard({
   const [exportOpen, setExportOpen] = useState(false);
   const [exportType, setExportType] = useState<ExportType>("daily");
 
-  const [activeTab, setActiveTab] = useState<TabId>("overview");
+  const [activeTab, setActiveTab] = useState<TabId>(() => parseStoredTab());
   /** Picklist engine: open/search/selected per filter id */
   const [_pl, setPl] = useState(() => initialPicklistState());
   const [rosterText, setRosterText] = useState("");
