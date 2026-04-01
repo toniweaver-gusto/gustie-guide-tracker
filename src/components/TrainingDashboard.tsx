@@ -1162,14 +1162,7 @@ function renderHowTo(): ReactNode {
       </section>
 
       <div className="howto-tip">
-        <strong>Weekly workflow</strong>
-        <p>
-          Export from Uplimit at the same time each week, upload with{" "}
-          <strong>Load New Report</strong>, skim <strong>Overview</strong> and{" "}
-          <strong>Overdue</strong>, then drill into <strong>Agent Summary</strong>{" "}
-          or <strong>Low Scores</strong> for 1:1s. Share the read-only link with
-          people leaders so everyone works from one source of truth.
-        </p>
+        <p>💡 Weekly workflow: Every Monday, download your latest Uplimit export, click Load New Report, upload the file, and share the Overdue and Low Scores tabs with your team leads for follow-up. Takes less than 2 minutes.</p>
       </div>
     </div>
   );

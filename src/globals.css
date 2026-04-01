@@ -698,19 +698,12 @@ input[type="file"] { display: none; }
   padding: 16px 20px;
   margin-top: 8px;
 }
-.howto-tip strong {
-  display: block;
-  font-family: var(--font-dm-sans), 'DM Sans', sans-serif;
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: var(--kale);
-  margin-bottom: 8px;
-  letter-spacing: 0.02em;
-}
 .howto-tip p {
   font-size: 0.72rem;
+  font-weight: 400;
   color: var(--ink);
   line-height: 1.55;
+  margin: 0;
 }
 
 /* ── MISC ── */
