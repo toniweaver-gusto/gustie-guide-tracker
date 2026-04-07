@@ -6,5 +6,7 @@ export function appOriginWithBase(): string {
 }
 
 export function shareUrlForToken(token: string): string {
-  return `${appOriginWithBase()}/d/${token}`;
+  const base = appOriginWithBase();
+  const q = new URLSearchParams({ share: token });
+  return `${base}/?${q.toString()}`;
 }

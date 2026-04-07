@@ -1,12 +1,7 @@
 /** `null` = all selected, `[]` = none, `[...]` = explicit subset */
 export type PicklistSelection = string[] | null;
 
-export type PicklistId =
-  | "agent"
-  | "month"
-  | "module"
-  | "team"
-  | "manager";
+export type PicklistId = "agent" | "month" | "team";
 
 export type PicklistSlice = {
   open: boolean;
@@ -18,9 +13,7 @@ export function initialPicklistState(): Record<PicklistId, PicklistSlice> {
   return {
     agent: { open: false, search: "", selected: null },
     month: { open: false, search: "", selected: null },
-    module: { open: false, search: "", selected: null },
     team: { open: false, search: "", selected: null },
-    manager: { open: false, search: "", selected: null },
   };
 }
 

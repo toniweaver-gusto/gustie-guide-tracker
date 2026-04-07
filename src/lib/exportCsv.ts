@@ -1,11 +1,14 @@
+import { getWeekStart } from "./dashboardHelpers";
+import type { PeriodMode } from "./periodMode";
 import type { ProcessedDashboardData } from "./types";
 
+/** Mirrors dashboard getFilters: no manager dimension in exports. */
 export type ExportFilters = {
   agents: string[] | null;
   months: string[] | null;
-  modules: string[] | null;
-  managers: string[] | null;
+  moduleSearch: string;
   teams: string[] | null;
+  periodMode: PeriodMode;
 };
 
 export type ExportType = "daily" | "modules" | "log";
@@ -31,12 +34,6 @@ function agentsForFilters(
     if (f.agents.length === 0) return [];
     list = list.filter((a) => f.agents!.includes(a));
   }
-  if (f.managers !== null) {
-    if (f.managers.length === 0) return [];
-    list = list.filter((a) =>
-      f.managers!.some((pe) => data.agent_pe[a] === pe)
-    );
-  }
   if (f.teams !== null) {
     if (f.teams.length === 0) return [];
     list = list.filter((a) => {
@@ -52,16 +49,22 @@ function modulesForFilters(
   f: ExportFilters
 ): string[] {
   let modules = [...data.modules];
+  const q = f.moduleSearch.trim().toLowerCase();
+  if (q) modules = modules.filter((m) => m.toLowerCase().includes(q));
   if (f.months !== null) {
     if (f.months.length === 0) return [];
-    modules = modules.filter((m) => {
-      const rd = data.module_dates[m];
-      return Boolean(rd && f.months!.some((mo) => rd.startsWith(mo)));
-    });
-  }
-  if (f.modules !== null) {
-    if (f.modules.length === 0) return [];
-    modules = modules.filter((m) => f.modules!.includes(m));
+    if (f.periodMode === "week") {
+      modules = modules.filter((m) => {
+        const rd = data.module_dates[m];
+        if (!rd) return false;
+        return f.months!.includes(getWeekStart(rd));
+      });
+    } else {
+      modules = modules.filter((m) => {
+        const rd = data.module_dates[m];
+        return Boolean(rd && f.months!.some((mo) => rd.startsWith(mo)));
+      });
+    }
   }
   return modules;
 }
@@ -72,9 +75,24 @@ function datesForFilters(
 ): string[] {
   if (f.months === null) return [...data.all_dates];
   if (f.months.length === 0) return [];
+  if (f.periodMode === "week") {
+    return data.all_dates.filter((d) => f.months!.includes(getWeekStart(d)));
+  }
   return data.all_dates.filter((d) =>
     f.months!.some((mo) => d.startsWith(mo))
   );
+}
+
+function completionMatchesPeriod(
+  completedDate: string,
+  f: ExportFilters
+): boolean {
+  if (f.months === null) return true;
+  if (f.months.length === 0) return false;
+  if (f.periodMode === "week") {
+    return f.months.includes(getWeekStart(completedDate));
+  }
+  return f.months.some((mo) => completedDate.startsWith(mo));
 }
 
 export function buildExportCsv(
@@ -137,10 +155,7 @@ export function buildExportCsv(
     const completions = data.agent_modules[a] || {};
     Object.entries(completions).forEach(([mod, completedDate]) => {
       if (!modules.includes(mod)) return;
-      if (f.months !== null) {
-        if (f.months.length === 0) return;
-        if (!f.months.some((mo) => completedDate.startsWith(mo))) return;
-      }
+      if (!completionMatchesPeriod(completedDate, f)) return;
       const releaseDate = data.module_dates[mod] || "";
       let daysDiff = "";
       if (releaseDate && completedDate) {

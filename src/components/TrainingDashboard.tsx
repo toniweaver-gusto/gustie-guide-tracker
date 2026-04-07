@@ -12,6 +12,12 @@ import {
   type ExportFilters,
   type ExportType,
 } from "@/lib/exportCsv";
+import type { DashboardFilters } from "@/lib/dashboardFilters";
+import {
+  filterAgentsList,
+  filterDatesForViews,
+  filterModulesForViews,
+} from "@/lib/dashboardFiltering";
 import { processCSVTexts } from "@/lib/csvParse";
 import { formatDate } from "@/lib/formatDate";
 import {
@@ -22,14 +28,21 @@ import {
   scorePillClass,
 } from "@/lib/dashboardHelpers";
 import {
+  collectMonthKeys,
+  collectWeekKeys,
+  formatWeekPeriodLabel,
+  type PeriodMode,
+} from "@/lib/periodMode";
+import { ManagerViewPane } from "@/components/ManagerView";
+import {
   normalizeRawScores,
-  sanitizeForPostgres,
   sanitizeProcessedDataForPostgres,
 } from "@/lib/sanitizeProcessedData";
 import type { ProcessedDashboardData } from "@/lib/types";
 import {
   createDashboard,
   fetchDashboardByToken,
+  fetchLatestDashboard,
   patchDashboard,
 } from "@/lib/dashboardApi";
 import { shareUrlForToken } from "@/lib/appPaths";
@@ -41,76 +54,13 @@ import {
   picklistButtonLabel,
   toggleAllPicklist,
   type PicklistId,
-  type PicklistSelection,
 } from "@/lib/picklistEngine";
 
 const SESSION_KEY = "uplimit_dashboard_token";
 const GGT_DATA_KEY = "ggt_data";
 const GGT_TAB_KEY = "ggt_tab";
 
-/** Multi-select: `null` = all, `[]` = none, `[...]` = subset */
-export type DashboardFilters = {
-  agents: PicklistSelection;
-  months: PicklistSelection;
-  modules: PicklistSelection;
-  managers: PicklistSelection;
-  teams: PicklistSelection;
-};
-
-function filterAgentsList(
-  data: ProcessedDashboardData,
-  f: DashboardFilters
-): string[] {
-  let list = [...data.agents];
-  if (f.agents !== null) {
-    if (f.agents.length === 0) return [];
-    list = list.filter((a) => f.agents!.includes(a));
-  }
-  if (f.managers !== null) {
-    if (f.managers.length === 0) return [];
-    list = list.filter((a) =>
-      f.managers!.some((pe) => data.agent_pe[a] === pe)
-    );
-  }
-  if (f.teams !== null) {
-    if (f.teams.length === 0) return [];
-    list = list.filter((a) => {
-      const gs = data.agent_groups[a] ?? [];
-      return f.teams!.some((t) => gs.includes(t));
-    });
-  }
-  return list;
-}
-
-function filterModulesForViews(
-  data: ProcessedDashboardData,
-  f: DashboardFilters
-): string[] {
-  let modules = [...data.modules];
-  if (f.months !== null) {
-    if (f.months.length === 0) return [];
-    modules = modules.filter((m) => {
-      const rd = data.module_dates[m];
-      return Boolean(rd && f.months!.some((mo) => rd.startsWith(mo)));
-    });
-  }
-  if (f.modules !== null) {
-    if (f.modules.length === 0) return [];
-    modules = modules.filter((m) => f.modules!.includes(m));
-  }
-  return modules;
-}
-
-function filterDatesForViews(
-  data: ProcessedDashboardData,
-  f: DashboardFilters
-): string[] {
-  if (f.months === null) return [...data.all_dates];
-  if (f.months.length === 0) return [];
-  return data.all_dates.filter((d) =>
-    f.months!.some((mo) => d.startsWith(mo))
-  );
-}
+export type { DashboardFilters };
 
 /** Stats strip — same agent/module semantics as `renderOverview`. */
 function computeFilteredStatsStrip(
@@ -121,13 +71,11 @@ function computeFilteredStatsStrip(
   completions: number;
   overallPct: number;
   overdue: number;
-  lowScores: number;
 } {
   const agents = filterAgentsList(data, f);
   const modules = filterModulesForViews(data, f);
   const today = new Date().toISOString().slice(0, 10);
   const todayWeek = getWeekStart(today);
-  const scoreMap = data._raw_scores ?? {};
 
   if (!agents.length || !modules.length) {
     return {
@@ -135,21 +83,17 @@ function computeFilteredStatsStrip(
       completions: 0,
       overallPct: 0,
       overdue: 0,
-      lowScores: 0,
     };
   }
 
   let completions = 0;
   let overdue = 0;
-  let lowScores = 0;
 
   agents.forEach((a) => {
     const completed = new Set(Object.keys(data.agent_modules[a] || {}));
     modules.forEach((mod) => {
       if (completed.has(mod)) {
         completions++;
-        const s = scoreMap[a]?.[mod];
-        if (s !== undefined && s < LOW_SCORE_THRESHOLD) lowScores++;
       } else {
         const relDate = data.module_dates[mod];
         if (relDate && getWeekStart(relDate) < todayWeek) overdue++;
@@ -166,7 +110,6 @@ function computeFilteredStatsStrip(
     completions,
     overallPct,
     overdue,
-    lowScores,
   };
 }
 
@@ -210,14 +153,12 @@ function StatsStripAnimated({
     completions: number;
     overallPct: number;
     overdue: number;
-    lowScores: number;
   };
 }) {
   const animAgents = useAnimatedInt(stats.agents);
   const animCompletions = useAnimatedInt(stats.completions);
   const animPct = useAnimatedInt(stats.overallPct);
   const animOverdue = useAnimatedInt(stats.overdue);
-  const animLow = useAnimatedInt(stats.lowScores);
 
   return (
     <>
@@ -245,12 +186,6 @@ function StatsStripAnimated({
         </div>
         <div className="stat-label">Overdue</div>
       </div>
-      <div className="stat">
-        <div className="stat-val" style={{ color: "var(--warn)" }}>
-          {animLow.toLocaleString()}
-        </div>
-        <div className="stat-label">Low Scores</div>
-      </div>
     </>
   );
 }
@@ -263,22 +198,31 @@ function formatMonthKey(m: string): string {
   });
 }
 
+function formatLastSavedLabel(iso: string): string {
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    return d.toLocaleString(undefined, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+  } catch {
+    return iso;
+  }
+}
+
 function picklistAllValues(
   id: PicklistId,
   data: ProcessedDashboardData,
-  monthKeys: string[]
+  periodKeys: string[]
 ): string[] {
   switch (id) {
     case "agent":
       return [...data.agents];
     case "month":
-      return monthKeys;
-    case "module":
-      return [...data.modules];
+      return periodKeys;
     case "team":
       return [...data.group_names];
-    case "manager":
-      return [...data.pe_names];
     default:
       return [];
   }
@@ -619,83 +563,83 @@ function renderModules(
     );
   }
 
+  const moduleTableHeader = (
+    <tr>
+      <th className="sticky-agent" style={{ minWidth: 220 }}>
+        Module
+      </th>
+      <th>Released</th>
+      {agents.map((a) => (
+        <th key={a} title={a}>
+          {a.split(" ")[0]}
+        </th>
+      ))}
+      <th style={{ textAlign: "right" }}>Coverage</th>
+    </tr>
+  );
+
+  const moduleTableBodyRows = modules.map((mod) => {
+    const releaseDate = data.module_dates[mod] || "";
+    let completedCount = 0;
+    agents.forEach((a) => {
+      if (data.agent_modules[a]?.[mod]) completedCount++;
+    });
+    const pct = Math.round((completedCount / agents.length) * 100);
+    const pctCls =
+      pct === 100
+        ? "full"
+        : pct >= 75
+          ? "high"
+          : pct >= 40
+            ? "mid"
+            : "low";
+    return (
+      <tr key={mod}>
+        <td className="sticky-agent mod-name-cell" title={mod}>
+          {mod}
+        </td>
+        <td className="mod-date-cell">
+          {releaseDate ? formatDate(releaseDate) : "—"}
+        </td>
+        {agents.map((a) => {
+          const completedOn = data.agent_modules[a]?.[mod];
+          if (completedOn) {
+            return (
+              <td key={a}>
+                <span
+                  className="mod-check done"
+                  title={`${a} completed on ${formatDate(completedOn)}`}
+                >
+                  ✓
+                </span>
+              </td>
+            );
+          }
+          return (
+            <td key={a}>
+              <span
+                className="mod-check miss"
+                title={`${a} has not completed this`}
+              >
+                ·
+              </span>
+            </td>
+          );
+        })}
+        <td className="mod-pct-cell">
+          <span className={`pct-pill ${pctCls}`}>
+            {completedCount}/{agents.length}
+          </span>
+        </td>
+      </tr>
+    );
+  });
+
   return (
     <div className="module-wrap">
       <table className="module-table">
-        <thead>
-          <tr>
-            <th className="sticky-agent" style={{ minWidth: 220 }}>
-              Module
-            </th>
-            <th>Released</th>
-            {agents.map((a) => (
-              <th key={a} title={a}>
-                {a.split(" ")[0]}
-              </th>
-            ))}
-            <th style={{ textAlign: "right" }}>Coverage</th>
-          </tr>
-        </thead>
-        <tbody>
-          {modules.map((mod) => {
-            const releaseDate = data.module_dates[mod] || "";
-            let completedCount = 0;
-            agents.forEach((a) => {
-              if (data.agent_modules[a]?.[mod]) completedCount++;
-            });
-            const pct = Math.round(
-              (completedCount / agents.length) * 100
-            );
-            const pctCls =
-              pct === 100
-                ? "full"
-                : pct >= 75
-                  ? "high"
-                  : pct >= 40
-                    ? "mid"
-                    : "low";
-            return (
-              <tr key={mod}>
-                <td className="sticky-agent mod-name-cell" title={mod}>
-                  {mod}
-                </td>
-                <td className="mod-date-cell">
-                  {releaseDate ? formatDate(releaseDate) : "—"}
-                </td>
-                {agents.map((a) => {
-                  const completedOn = data.agent_modules[a]?.[mod];
-                  if (completedOn) {
-                    return (
-                      <td key={a}>
-                        <span
-                          className="mod-check done"
-                          title={`${a} completed on ${formatDate(completedOn)}`}
-                        >
-                          ✓
-                        </span>
-                      </td>
-                    );
-                  }
-                  return (
-                    <td key={a}>
-                      <span
-                        className="mod-check miss"
-                        title={`${a} has not completed this`}
-                      >
-                        ·
-                      </span>
-                    </td>
-                  );
-                })}
-                <td className="mod-pct-cell">
-                  <span className={`pct-pill ${pctCls}`}>
-                    {completedCount}/{agents.length}
-                  </span>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
+        <thead>{moduleTableHeader}</thead>
+        <tbody>{moduleTableBodyRows}</tbody>
       </table>
     </div>
   );
@@ -760,124 +704,125 @@ function renderAgents(
     })
     .sort((x, y) => x.pct - y.pct);
 
+  const agentTableHeader = (
+    <tr>
+      <th>Agent</th>
+      <th>Manager</th>
+      <th>% Complete</th>
+      <th>Completed</th>
+      <th>Missing</th>
+      <th>Avg Score</th>
+      <th>Last Activity</th>
+      <th>Status</th>
+    </tr>
+  );
+
+  const agentTableBodyRows = agentRows.map(
+    ({
+      a,
+      pct,
+      completed,
+      missing,
+      overdue,
+      avgScore,
+      lastDate,
+      daysAgo,
+      managerName,
+    }) => {
+      let statusLabel: string;
+      let statusCls: string;
+      if (pct === 100) {
+        statusLabel = "Complete";
+        statusCls = "complete";
+      } else if (overdue > 0) {
+        statusLabel = `${overdue} Overdue`;
+        statusCls = "overdue";
+      } else if (
+        avgScore !== null &&
+        avgScore < LOW_SCORE_THRESHOLD
+      ) {
+        statusLabel = "Low Score";
+        statusCls = "low-score";
+      } else {
+        statusLabel = "In Progress";
+        statusCls = "in-progress";
+      }
+      const fillCls = progFillClass(pct);
+      return (
+        <tr key={a}>
+          <td className="agent-name-cell">{a}</td>
+          <td
+            style={{
+              fontSize: "0.68rem",
+              color: "var(--muted)",
+            }}
+          >
+            {managerName}
+          </td>
+          <td>
+            <div className="prog-bar-wrap">
+              <div className="prog-bar">
+                <div
+                  className={`prog-fill ${fillCls}`}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+              <span className="prog-pct">{pct}%</span>
+            </div>
+          </td>
+          <td
+            style={{
+              fontFamily: "'DM Mono',monospace",
+              fontSize: "0.68rem",
+              color: "var(--kale)",
+            }}
+          >
+            {completed}
+          </td>
+          <td
+            style={{
+              fontFamily: "'DM Mono',monospace",
+              fontSize: "0.68rem",
+              color: missing > 0 ? "var(--danger)" : "var(--muted)",
+            }}
+          >
+            {missing > 0 ? missing : "✓"}
+          </td>
+          <td>
+            <span
+              className={`score-pill ${
+                avgScore !== null ? scorePillClass(avgScore) : "na"
+              }`}
+            >
+              {avgScore !== null ? `${avgScore}%` : "—"}
+            </span>
+          </td>
+          <td>
+            <span
+              className={`days-badge ${
+                daysAgo !== null && daysAgo > 14 ? "stale" : ""
+              }`}
+            >
+              {lastDate
+                ? `${formatDate(lastDate)}${daysAgo !== null ? ` (${daysAgo}d ago)` : ""}`
+                : "—"}
+            </span>
+          </td>
+          <td>
+            <span className={`status-badge ${statusCls}`}>
+              {statusLabel}
+            </span>
+          </td>
+        </tr>
+      );
+    }
+  );
+
   return (
     <div className="agent-wrap">
       <table className="agent-table agent-table-fixed">
-        <thead>
-          <tr>
-            <th>Agent</th>
-            <th>Manager</th>
-            <th>% Complete</th>
-            <th>Completed</th>
-            <th>Missing</th>
-            <th>Avg Score</th>
-            <th>Last Activity</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {agentRows.map(
-            ({
-              a,
-              pct,
-              completed,
-              missing,
-              overdue,
-              avgScore,
-              lastDate,
-              daysAgo,
-              managerName,
-            }) => {
-              let statusLabel: string;
-              let statusCls: string;
-              if (pct === 100) {
-                statusLabel = "Complete";
-                statusCls = "complete";
-              } else if (overdue > 0) {
-                statusLabel = `${overdue} Overdue`;
-                statusCls = "overdue";
-              } else if (
-                avgScore !== null &&
-                avgScore < LOW_SCORE_THRESHOLD
-              ) {
-                statusLabel = "Low Score";
-                statusCls = "low-score";
-              } else {
-                statusLabel = "In Progress";
-                statusCls = "in-progress";
-              }
-              const fillCls = progFillClass(pct);
-              return (
-                <tr key={a}>
-                  <td className="agent-name-cell">{a}</td>
-                  <td
-                    style={{
-                      fontSize: "0.68rem",
-                      color: "var(--muted)",
-                    }}
-                  >
-                    {managerName}
-                  </td>
-                  <td>
-                    <div className="prog-bar-wrap">
-                      <div className="prog-bar">
-                        <div
-                          className={`prog-fill ${fillCls}`}
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                      <span className="prog-pct">{pct}%</span>
-                    </div>
-                  </td>
-                  <td
-                    style={{
-                      fontFamily: "'DM Mono',monospace",
-                      fontSize: "0.68rem",
-                      color: "var(--kale)",
-                    }}
-                  >
-                    {completed}
-                  </td>
-                  <td
-                    style={{
-                      fontFamily: "'DM Mono',monospace",
-                      fontSize: "0.68rem",
-                      color:
-                        missing > 0 ? "var(--danger)" : "var(--muted)",
-                    }}
-                  >
-                    {missing > 0 ? missing : "✓"}
-                  </td>
-                  <td>
-                    <span
-                      className={`score-pill ${
-                        avgScore !== null ? scorePillClass(avgScore) : "na"
-                      }`}
-                    >
-                      {avgScore !== null ? `${avgScore}%` : "—"}
-                    </span>
-                  </td>
-                  <td>
-                    <span
-                      className={`days-badge ${
-                        daysAgo !== null && daysAgo > 14 ? "stale" : ""
-                      }`}
-                    >
-                      {lastDate
-                        ? `${formatDate(lastDate)}${daysAgo !== null ? ` (${daysAgo}d ago)` : ""}`
-                        : "—"}
-                    </span>
-                  </td>
-                  <td>
-                    <span className={`status-badge ${statusCls}`}>
-                      {statusLabel}
-                    </span>
-                  </td>
-                </tr>
-              );
-            }
-          )}
-        </tbody>
+        <thead>{agentTableHeader}</thead>
+        <tbody>{agentTableBodyRows}</tbody>
       </table>
     </div>
   );
@@ -1011,126 +956,6 @@ function renderOverdue(
   );
 }
 
-/** Tab: Low Scores — mirrors `renderLowScores` */
-function renderLowScores(
-  data: ProcessedDashboardData,
-  f: DashboardFilters
-): ReactNode {
-  const agents = filterAgentsList(data, f);
-  const modules = filterModulesForViews(data, f);
-
-  const scoreMap = data._raw_scores ?? {};
-  const lowList: {
-    agent: string;
-    mod: string;
-    score: number;
-    completedDate: string;
-    manager: string;
-  }[] = [];
-
-  agents.forEach((a) => {
-    modules.forEach((mod) => {
-      if (!data.agent_modules[a]?.[mod]) return;
-      const s = scoreMap[a]?.[mod];
-      if (s === undefined || s >= LOW_SCORE_THRESHOLD) return;
-      lowList.push({
-        agent: a,
-        mod,
-        score: s,
-        completedDate: data.agent_modules[a][mod],
-        manager: data.agent_pe?.[a] || "—",
-      });
-    });
-  });
-
-  lowList.sort((x, y) => x.score - y.score);
-
-  return (
-    <div className="overview-wrap">
-      {!lowList.length ? (
-        <div
-          style={{
-            padding: 40,
-            textAlign: "center",
-            color: "var(--kale)",
-            fontSize: "0.85rem",
-            fontWeight: 600,
-          }}
-        >
-          ✓ No scores below 80% for the current filters.
-        </div>
-      ) : (
-        <>
-          <div
-            style={{
-              marginBottom: 16,
-              fontSize: "0.78rem",
-              color: "var(--muted)",
-            }}
-          >
-            Showing{" "}
-            <strong style={{ color: "var(--warn)" }}>{lowList.length}</strong>{" "}
-            completion
-            {lowList.length !== 1 ? "s" : ""} with score below 80% — these
-            agents may need coaching.
-          </div>
-          <table className="ov-table">
-            <thead>
-              <tr>
-                <th>Agent</th>
-                <th>Manager</th>
-                <th>Module</th>
-                <th>Score</th>
-                <th>Completed</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lowList.map((row) => (
-                <tr key={`${row.agent}-${row.mod}`}>
-                  <td className="agent-name-cell">{row.agent}</td>
-                  <td
-                    style={{
-                      fontSize: "0.68rem",
-                      color: "var(--muted)",
-                    }}
-                  >
-                    {row.manager}
-                  </td>
-                  <td
-                    style={{
-                      maxWidth: 240,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                    title={row.mod}
-                  >
-                    {row.mod}
-                  </td>
-                  <td>
-                    <span className={`score-pill ${scorePillClass(row.score)}`}>
-                      {row.score}%
-                    </span>
-                  </td>
-                  <td
-                    style={{
-                      fontFamily: "'DM Mono',monospace",
-                      fontSize: "0.62rem",
-                      color: "var(--muted)",
-                    }}
-                  >
-                    {row.completedDate}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </>
-      )}
-    </div>
-  );
-}
-
 /** How to Use tab — static content (matches HTML design system + app features). */
 function renderHowTo(): ReactNode {
   return (
@@ -1165,11 +990,12 @@ function renderHowTo(): ReactNode {
           <span className="howto-step-num">2</span>
           <h4>Filter and explore</h4>
           <p>
-            Use the multi-select picklists for <strong>Agent</strong>,{" "}
-            <strong>Month</strong>, <strong>Module</strong>, and—when your export
-            includes them—<strong>Team</strong> (<code>GROUP_NAME</code>) and{" "}
-            <strong>Manager</strong> (<code>PE_NAME</code>). Search inside each
-            list and use <strong>Select All</strong> to reset scope.
+            Use <strong>Agent</strong>, the <strong>Month / Week</strong> period
+            toggle and period picklist, <strong>Search Module</strong>, and—when
+            your export includes it—<strong>Team</strong> (
+            <code>GROUP_NAME</code>). Use <strong>Manager View</strong> for{" "}
+            <code>PE_NAME</code> manager scope. Use <strong>Select All</strong>{" "}
+            in picklists to reset scope.
           </p>
         </div>
         <div className="howto-step">
@@ -1227,14 +1053,6 @@ function renderHowTo(): ReactNode {
             </p>
           </div>
           <div className="howto-tab-card">
-            <div className="howto-tab-card-icon">🟡</div>
-            <h4>Low Scores</h4>
-            <p>
-              Completed modules with score below 80%, sorted lowest first for
-              coaching follow-up.
-            </p>
-          </div>
-          <div className="howto-tab-card">
             <div className="howto-tab-card-icon">👥</div>
             <h4>Roster Gaps</h4>
             <p>
@@ -1248,6 +1066,14 @@ function renderHowTo(): ReactNode {
             <p>
               This reference: how the dashboard works and how to get the most from
               each view.
+            </p>
+          </div>
+          <div className="howto-tab-card">
+            <div className="howto-tab-card-icon">🏆</div>
+            <h4>Manager View</h4>
+            <p>
+              Manager-scoped KPIs, weekly completion trend, activity heatmap, most
+              missed modules, and per-agent cards—with definitions in the sidebar.
             </p>
           </div>
         </div>
@@ -1292,7 +1118,7 @@ function renderHowTo(): ReactNode {
       </section>
 
       <div className="howto-tip">
-        <p>💡 Weekly workflow: Every Monday, download your latest Uplimit export, click Load New Report, upload the file, and share the Overdue and Low Scores tabs with your team leads for follow-up. Takes less than 2 minutes.</p>
+        <p>💡 Weekly workflow: Every Monday, download your latest Uplimit export, click Load New Report, upload the file, and share the Overdue tab and Manager View with your team leads for follow-up. Takes less than 2 minutes.</p>
       </div>
     </div>
   );
@@ -1304,9 +1130,9 @@ type TabId =
   | "modules"
   | "agents"
   | "overdue"
-  | "lowscore"
   | "roster"
-  | "howto";
+  | "howto"
+  | "manager";
 
 const VALID_TAB_IDS: readonly TabId[] = [
   "overview",
@@ -1314,10 +1140,59 @@ const VALID_TAB_IDS: readonly TabId[] = [
   "modules",
   "agents",
   "overdue",
-  "lowscore",
   "roster",
   "howto",
+  "manager",
 ] as const;
+
+function TabDescRow({ icon, text }: { icon: string; text: string }) {
+  return (
+    <div className="tab-desc">
+      <span className="tab-desc-icon" aria-hidden>
+        {icon}
+      </span>
+      <span className="tab-desc-text">{text}</span>
+    </div>
+  );
+}
+
+const TAB_DESC: Record<
+  TabId,
+  { icon: string; text: string }
+> = {
+  overview: {
+    icon: "📊",
+    text: "Roll-up of assignments, completion, and module-level performance for the current filters.",
+  },
+  daily: {
+    icon: "📅",
+    text: "Per-day completion counts by agent, grouped by calendar month.",
+  },
+  modules: {
+    icon: "📚",
+    text: "Matrix of modules vs agents with release dates and completion checkmarks.",
+  },
+  agents: {
+    icon: "👤",
+    text: "Agents ranked by completion % with manager, scores, last activity, and status.",
+  },
+  overdue: {
+    icon: "🔴",
+    text: "Assignments past their release week that are still incomplete.",
+  },
+  roster: {
+    icon: "👥",
+    text: "Compare a pasted roster to the report to find gaps, extras, and inactive agents.",
+  },
+  howto: {
+    icon: "📖",
+    text: "How filters, tabs, and exports work—plus answers to common questions.",
+  },
+  manager: {
+    icon: "🏆",
+    text: "Leadership view: coverage, adherence, trends, heatmap, and missed modules for selected managers.",
+  },
+};
 
 type TooltipState = { text: string; x: number; y: number } | null;
 
@@ -1361,6 +1236,8 @@ export function TrainingDashboard({
   const [shareToken, setShareToken] = useState<string | null>(null);
   const [remoteLoading, setRemoteLoading] = useState(!!initialToken);
   const [remoteError, setRemoteError] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+  const [latestLoading, setLatestLoading] = useState(false);
 
   const [setupProgramName, setSetupProgramName] = useState("");
   const [setupTexts, setSetupTexts] = useState<string[]>([]);
@@ -1396,6 +1273,8 @@ export function TrainingDashboard({
   }, []);
   /** Picklist engine: open/search/selected per filter id */
   const [_pl, setPl] = useState(() => initialPicklistState());
+  const [periodMode, setPeriodMode] = useState<PeriodMode>("month");
+  const [moduleSearch, setModuleSearch] = useState("");
   const [rosterText, setRosterText] = useState("");
   const [rosterResults, setRosterResults] = useState<ReactNode>(null);
 
@@ -1413,6 +1292,43 @@ export function TrainingDashboard({
     } catch {
       /* ignore */
     }
+  }, [readOnly, initialToken]);
+
+  useEffect(() => {
+    if (readOnly || initialToken || !supabaseConfigured) return;
+    let skip = false;
+    try {
+      if (sessionStorage.getItem(GGT_DATA_KEY)) skip = true;
+    } catch {
+      /* ignore */
+    }
+    if (skip) return;
+
+    let cancelled = false;
+    setLatestLoading(true);
+    (async () => {
+      try {
+        const row = await fetchLatestDashboard();
+        if (cancelled) return;
+        if (row) {
+          setData(normalizeLoadedData(row.processed_data));
+          setShareToken(row.share_token);
+          setLastSavedAt(row.updated_at ?? null);
+          try {
+            sessionStorage.setItem(SESSION_KEY, row.share_token);
+          } catch {
+            /* ignore */
+          }
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        if (!cancelled) setLatestLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [readOnly, initialToken]);
 
   useEffect(() => {
@@ -1437,6 +1353,7 @@ export function TrainingDashboard({
         if (!cancelled) {
           setData(normalizeLoadedData(row.processed_data));
           setShareToken(row.share_token);
+          setLastSavedAt(row.updated_at ?? null);
         }
       } catch {
         if (!cancelled) setRemoteError(true);
@@ -1458,6 +1375,13 @@ export function TrainingDashboard({
     if (!data) return;
     setPl(initialPicklistState());
   }, [data]);
+
+  useEffect(() => {
+    setPl((p) => ({
+      ...p,
+      month: { ...p.month, selected: null, open: false },
+    }));
+  }, [periodMode]);
 
   useEffect(() => {
     const close = (e: MouseEvent) => {
@@ -1496,10 +1420,10 @@ export function TrainingDashboard({
         if (!supabaseConfigured) {
           throw new Error("Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY");
         }
-        const safe = sanitizeForPostgres({
+        const safe = sanitizeProcessedDataForPostgres({
           ...next,
           _raw_scores: normalizeRawScores(next._raw_scores),
-        }) as ProcessedDashboardData;
+        });
         let token = shareToken;
         try {
           token = token || sessionStorage.getItem(SESSION_KEY);
@@ -1524,10 +1448,11 @@ export function TrainingDashboard({
           }
           setShareToken(newToken);
         }
+        setLastSavedAt(new Date().toISOString());
       } catch (e) {
         console.error(e);
         alert(
-          "Could not save to Supabase. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, run migration 002 (RPC functions) in the SQL editor, then try again."
+          "Could not save to Supabase. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, run migrations 002–003 (RPC functions) in the SQL editor, then try again."
         );
       } finally {
         setSaving(false);
@@ -1590,31 +1515,40 @@ export function TrainingDashboard({
     await processAndApply(texts, programName);
   };
 
-  const monthKeys = useMemo(() => {
-    if (!data?.all_dates.length) return [];
-    return [...new Set(data.all_dates.map((d) => d.slice(0, 7)))].sort();
-  }, [data]);
+  const periodKeys = useMemo(() => {
+    if (!data) return [];
+    return periodMode === "month"
+      ? collectMonthKeys(data)
+      : collectWeekKeys(data);
+  }, [data, periodMode]);
 
   const filters: DashboardFilters = useMemo(
     () => ({
       agents: _pl.agent.selected,
       months: _pl.month.selected,
-      modules: _pl.module.selected,
-      managers: _pl.manager.selected,
+      moduleSearch,
+      managers: null,
       teams: _pl.team.selected,
+      periodMode,
     }),
-    [_pl]
+    [_pl, moduleSearch, periodMode]
   );
 
   const exportFilters: ExportFilters = useMemo(
     () => ({
       agents: filters.agents,
       months: filters.months,
-      modules: filters.modules,
-      managers: filters.managers,
+      moduleSearch: filters.moduleSearch,
       teams: filters.teams,
+      periodMode: filters.periodMode,
     }),
     [filters]
+  );
+
+  const formatPeriodOption = useCallback(
+    (v: string) =>
+      periodMode === "week" ? formatWeekPeriodLabel(v) : formatMonthKey(v),
+    [periodMode]
   );
 
   const togglePicklist = useCallback((id: PicklistId) => {
@@ -1636,27 +1570,27 @@ export function TrainingDashboard({
     (id: PicklistId) => (e: React.SyntheticEvent) => {
       e.stopPropagation();
       if (!data) return;
-      const all = picklistAllValues(id, data, monthKeys);
+      const all = picklistAllValues(id, data, periodKeys);
       setPl((p) => {
         const cur = p[id].selected;
         const nextSel = toggleAllPicklist(cur, all);
         return { ...p, [id]: { ...p[id], selected: nextSel } };
       });
     },
-    [data, monthKeys]
+    [data, periodKeys]
   );
 
   const togglePicklistItemHandler = useCallback(
     (id: PicklistId, val: string, checked: boolean) => {
       if (!data) return;
-      const all = picklistAllValues(id, data, monthKeys);
+      const all = picklistAllValues(id, data, periodKeys);
       setPl((p) => {
         const cur = p[id].selected;
         const nextSel = applyPicklistItemToggle(cur, val, checked, all);
         return { ...p, [id]: { ...p[id], selected: nextSel } };
       });
     },
-    [data, monthKeys]
+    [data, periodKeys]
   );
 
   const buildPicklist = (
@@ -1667,7 +1601,7 @@ export function TrainingDashboard({
     format?: (v: string) => string
   ) => {
     if (!data) return null;
-    const all = picklistAllValues(id, data, monthKeys);
+    const all = picklistAllValues(id, data, periodKeys);
     const slice = _pl[id];
     return (
       <FilterPicklist
@@ -1751,16 +1685,16 @@ export function TrainingDashboard({
     return renderOverdue(data, filters);
   }, [data, filters]);
 
-  const lowScoresPane = useMemo(() => {
+  const howtoPane = useMemo(() => renderHowTo(), []);
+
+  const managerPane = useMemo(() => {
     if (!data) {
       return (
-        <div className="no-data">Upload a report to see low score alerts.</div>
+        <div className="no-data">Upload a report to see Manager View.</div>
       );
     }
-    return renderLowScores(data, filters);
+    return <ManagerViewPane data={data} filters={filters} />;
   }, [data, filters]);
-
-  const howtoPane = useMemo(() => renderHowTo(), []);
 
   const applyRoster = () => {
     if (!data) return;
@@ -1902,28 +1836,31 @@ export function TrainingDashboard({
       );
     }
     const mf = filters.months;
+    const periodWord = filters.periodMode === "week" ? "Weeks" : "Months";
     if (mf === null) {
       chips.push(
         <span key="m" className="scope-chip active">
-          All Months
+          All {periodWord}
         </span>
       );
     } else if (mf.length === 0) {
       chips.push(
         <span key="m" className="scope-chip active">
-          No months
+          No {periodWord.toLowerCase()}
         </span>
       );
     } else if (mf.length === 1) {
       chips.push(
         <span key="m" className="scope-chip active">
-          {formatMonthKey(mf[0]!)}
+          {filters.periodMode === "week"
+            ? formatWeekPeriodLabel(mf[0]!)
+            : formatMonthKey(mf[0]!)}
         </span>
       );
     } else {
       chips.push(
         <span key="m" className="scope-chip active">
-          {mf.length} months
+          {mf.length} {filters.periodMode === "week" ? "weeks" : "months"}
         </span>
       );
     }
@@ -1935,26 +1872,17 @@ export function TrainingDashboard({
         </span>
       );
     }
-    const pf = filters.managers;
-    if (pf !== null && pf.length > 0) {
+    if (filters.moduleSearch.trim()) {
       chips.push(
-        <span key="mgr" className="scope-chip active">
-          {pf.length === 1 ? pf[0] : `${pf.length} managers`}
-        </span>
-      );
-    }
-    const modf = filters.modules;
-    if (modf !== null && modf.length > 0 && modf.length < (data?.modules.length ?? 0)) {
-      chips.push(
-        <span key="mod" className="scope-chip active">
-          {modf.length} modules
+        <span key="q" className="scope-chip active">
+          Module search
         </span>
       );
     }
     return chips;
-  }, [data?.modules.length, filters]);
+  }, [filters]);
 
-  const showSetup = !readOnly && !data;
+  const showSetup = !readOnly && !data && !latestLoading;
 
   const headerSubtitle = data
     ? readOnly
@@ -1963,6 +1891,16 @@ export function TrainingDashboard({
     : "";
 
   if (readOnly && remoteLoading) {
+    return (
+      <div className="setup-overlay" style={{ display: "flex" }}>
+        <p style={{ color: "var(--muted)", fontSize: "0.9rem" }}>
+          Loading dashboard…
+        </p>
+      </div>
+    );
+  }
+
+  if (!readOnly && !initialToken && latestLoading) {
     return (
       <div className="setup-overlay" style={{ display: "flex" }}>
         <p style={{ color: "var(--muted)", fontSize: "0.9rem" }}>
@@ -2234,6 +2172,11 @@ export function TrainingDashboard({
               Saving…
             </span>
           ) : null}
+          {!readOnly && lastSavedAt ? (
+            <span className="last-saved-chip" title={lastSavedAt}>
+              Last saved: {formatLastSavedLabel(lastSavedAt)}
+            </span>
+          ) : null}
           <div className="date-range">{dateRangeLabel}</div>
           {!readOnly && (
             <>
@@ -2257,6 +2200,13 @@ export function TrainingDashboard({
         </div>
       </header>
 
+      {readOnly && data ? (
+        <div className="shared-view-banner" role="status">
+          Read-only shared view — you can&apos;t upload new reports from this
+          link.
+        </div>
+      ) : null}
+
       <div className="stats-strip">
         {stats ? <StatsStripAnimated stats={stats} /> : null}
       </div>
@@ -2269,9 +2219,9 @@ export function TrainingDashboard({
             { id: "modules" as const, label: "📚 By Module" },
             { id: "agents" as const, label: "👤 Agent Summary" },
             { id: "overdue" as const, label: "🔴 Overdue" },
-            { id: "lowscore" as const, label: "🟡 Low Scores" },
             { id: "roster" as const, label: "👥 Roster Gaps" },
             { id: "howto" as const, label: "📖 How to Use" },
+            { id: "manager" as const, label: "🏆 Manager View" },
           ] as const
         ).map(({ id, label }) => (
           <div
@@ -2313,24 +2263,44 @@ export function TrainingDashboard({
       <div className="filter-bar">
         {buildPicklist("agent", "Agent", "All Agents", "No agents")}
         <div className="filter-sep" />
-        {buildPicklist("month", "Month", "All Months", "No months", formatMonthKey)}
+        <div className="period-toggle-group" role="group" aria-label="Period mode">
+          <button
+            type="button"
+            className={`period-toggle-btn${periodMode === "month" ? " active" : ""}`}
+            onClick={() => setPeriodMode("month")}
+          >
+            Month
+          </button>
+          <button
+            type="button"
+            className={`period-toggle-btn${periodMode === "week" ? " active" : ""}`}
+            onClick={() => setPeriodMode("week")}
+          >
+            Week
+          </button>
+        </div>
         <div className="filter-sep" />
-        {buildPicklist("module", "Module", "All modules", "No modules")}
+        {buildPicklist(
+          "month",
+          periodMode === "week" ? "Week" : "Month",
+          periodMode === "week" ? "All weeks" : "All months",
+          periodMode === "week" ? "No weeks" : "No months",
+          formatPeriodOption
+        )}
+        <div className="filter-sep" />
+        <label htmlFor="moduleSearchInp">Search Module</label>
+        <input
+          id="moduleSearchInp"
+          type="text"
+          placeholder="e.g. W-2, Payroll…"
+          value={moduleSearch}
+          onChange={(e) => setModuleSearch(e.target.value)}
+          style={{ width: 180 }}
+        />
         {data.group_names.length > 0 && (
           <>
             <div className="filter-sep" />
             {buildPicklist("team", "Team", "All teams", "No teams")}
-          </>
-        )}
-        {data.pe_names.length > 0 && (
-          <>
-            <div className="filter-sep" />
-            {buildPicklist(
-              "manager",
-              "Manager",
-              "All managers",
-              "No managers"
-            )}
           </>
         )}
       </div>
@@ -2340,42 +2310,42 @@ export function TrainingDashboard({
           className={`tab-pane${activeTab === "overview" ? " active" : ""}`}
           id="pane-overview"
         >
+          <TabDescRow {...TAB_DESC.overview} />
           {overviewPane}
         </div>
         <div
           className={`tab-pane${activeTab === "daily" ? " active" : ""}`}
           id="pane-daily"
         >
+          <TabDescRow {...TAB_DESC.daily} />
           {dailyPane}
         </div>
         <div
           className={`tab-pane${activeTab === "modules" ? " active" : ""}`}
           id="pane-modules"
         >
+          <TabDescRow {...TAB_DESC.modules} />
           {modulesPane}
         </div>
         <div
           className={`tab-pane${activeTab === "agents" ? " active" : ""}`}
           id="pane-agents"
         >
+          <TabDescRow {...TAB_DESC.agents} />
           {agentsPane}
         </div>
         <div
           className={`tab-pane${activeTab === "overdue" ? " active" : ""}`}
           id="pane-overdue"
         >
+          <TabDescRow {...TAB_DESC.overdue} />
           {overduePane}
-        </div>
-        <div
-          className={`tab-pane${activeTab === "lowscore" ? " active" : ""}`}
-          id="pane-lowscore"
-        >
-          {lowScoresPane}
         </div>
         <div
           className={`tab-pane${activeTab === "roster" ? " active" : ""}`}
           id="pane-roster"
         >
+          <TabDescRow {...TAB_DESC.roster} />
           <div className="roster-wrap">
             <div className="gap-card">
               <h3>🗂 Paste Your Agent Roster</h3>
@@ -2409,7 +2379,15 @@ export function TrainingDashboard({
           className={`tab-pane${activeTab === "howto" ? " active" : ""}`}
           id="pane-howto"
         >
+          <TabDescRow {...TAB_DESC.howto} />
           {howtoPane}
+        </div>
+        <div
+          className={`tab-pane${activeTab === "manager" ? " active" : ""}`}
+          id="pane-manager"
+        >
+          <TabDescRow {...TAB_DESC.manager} />
+          {managerPane}
         </div>
       </div>
 
