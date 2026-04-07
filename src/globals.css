@@ -1095,6 +1095,348 @@ input[type="file"] { display: none; }
   margin: 0;
 }
 
+/* ── TEAM LANDING (workspace manager) ── */
+.landing-page {
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+}
+.landing-header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 28px 32px 24px;
+}
+.landing-brand {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+.landing-logo {
+  font-family: var(--font-dm-sans), 'DM Sans', sans-serif;
+  font-size: 1.75rem;
+  font-weight: 600;
+  color: var(--guava);
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+}
+.landing-title {
+  font-family: var(--font-playfair), 'Playfair Display', serif;
+  font-size: 1.65rem;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 6px;
+  line-height: 1.2;
+}
+.landing-subtitle {
+  font-size: 0.82rem;
+  color: var(--muted);
+  line-height: 1.5;
+  max-width: 36rem;
+}
+.landing-main {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 28px 32px 48px;
+}
+.landing-search-wrap { margin-bottom: 24px; }
+.landing-search-label {
+  display: block;
+  font-size: 0.58rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.landing-search-input {
+  width: 100%;
+  max-width: 400px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--ink);
+  font-family: var(--font-dm-sans), 'DM Sans', sans-serif;
+  font-size: 0.88rem;
+  padding: 10px 14px;
+  border-radius: 8px;
+  outline: none;
+}
+.landing-search-input:focus { border-color: var(--kale); }
+.landing-error {
+  color: var(--danger);
+  font-size: 0.8rem;
+  margin-bottom: 16px;
+}
+.landing-loading, .landing-no-match {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin-bottom: 20px;
+}
+.landing-empty {
+  text-align: center;
+  padding: 32px 20px 40px;
+}
+.landing-empty-icon {
+  font-size: 3.5rem;
+  line-height: 1;
+  margin-bottom: 16px;
+  opacity: 0.85;
+}
+.landing-empty-title {
+  font-family: var(--font-playfair), 'Playfair Display', serif;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 8px;
+}
+.landing-empty-desc {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-bottom: 28px;
+  line-height: 1.55;
+}
+.landing-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+@media (max-width: 960px) {
+  .landing-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 560px) {
+  .landing-grid { grid-template-columns: 1fr; }
+}
+.landing-card {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  transition: box-shadow 0.2s, border-color 0.2s;
+}
+.landing-card:hover {
+  box-shadow: 0 6px 20px rgba(34, 37, 37, 0.06);
+}
+.landing-card--current {
+  border-color: var(--kale);
+  box-shadow: 0 0 0 1px var(--kale-mid);
+}
+.landing-card-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  font-size: 0.52rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: white;
+  background: var(--kale);
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+.landing-card-name {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.25;
+  padding-right: 72px;
+}
+.landing-card--current .landing-card-name { padding-right: 80px; }
+.landing-card-stats {
+  display: grid;
+  gap: 10px;
+  font-size: 0.72rem;
+}
+.landing-card-stats dt {
+  color: var(--muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.58rem;
+  margin-bottom: 2px;
+}
+.landing-card-stats dd {
+  font-family: var(--font-dm-mono), 'DM Mono', monospace;
+  color: var(--ink);
+  font-size: 0.72rem;
+}
+.landing-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 4px;
+}
+.landing-card-edit { display: flex; flex-direction: column; gap: 10px; }
+.landing-card-edit-input {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--ink);
+  font-family: var(--font-dm-sans), 'DM Sans', sans-serif;
+}
+.landing-card-edit-input:focus {
+  outline: none;
+  border-color: var(--kale);
+}
+.landing-card-edit-actions { display: flex; gap: 8px; }
+.landing-btn {
+  font-family: var(--font-dm-sans), 'DM Sans', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: opacity 0.2s, background 0.2s, border-color 0.2s;
+}
+.landing-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.landing-btn-sm { padding: 6px 12px; font-size: 0.68rem; }
+.landing-btn-primary {
+  background: var(--kale);
+  color: white;
+  border-color: var(--kale);
+}
+.landing-btn-primary:hover:not(:disabled) {
+  opacity: 0.92;
+}
+.landing-btn-secondary {
+  background: var(--surface);
+  color: var(--ink);
+  border-color: var(--border);
+}
+.landing-btn-secondary:hover:not(:disabled) {
+  border-color: var(--kale);
+  color: var(--kale);
+}
+.landing-btn-ghost {
+  background: transparent;
+  color: var(--muted);
+  border-color: var(--border);
+}
+.landing-btn-danger {
+  background: var(--danger);
+  color: white;
+  border-color: var(--danger);
+}
+.landing-btn-danger:hover:not(:disabled) { opacity: 0.9; }
+.landing-btn-danger-subtle {
+  background: transparent;
+  color: var(--danger);
+  border-color: var(--danger-dim);
+}
+.landing-btn-danger-subtle:hover:not(:disabled) {
+  background: var(--danger-dim);
+}
+.landing-create-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 36px 0 28px;
+}
+.landing-create-heading {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 14px;
+  font-family: var(--font-dm-sans), 'DM Sans', sans-serif;
+}
+.landing-create-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+.landing-create-input {
+  flex: 1;
+  min-width: 220px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 0.85rem;
+  color: var(--ink);
+  font-family: var(--font-dm-sans), 'DM Sans', sans-serif;
+}
+.landing-create-input:focus {
+  outline: none;
+  border-color: var(--kale);
+}
+.landing-create--prominent .landing-create-heading {
+  font-size: 1.1rem;
+  font-family: var(--font-playfair), 'Playfair Display', serif;
+}
+.landing-create--prominent .landing-create-input {
+  min-width: 100%;
+  padding: 12px 16px;
+  font-size: 0.9rem;
+}
+.landing-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(34, 37, 37, 0.45);
+  z-index: 400;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.landing-modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 28px 26px 22px;
+  max-width: 420px;
+  width: 100%;
+  box-shadow: 0 16px 48px rgba(34, 37, 37, 0.12);
+}
+.landing-modal-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 12px;
+  font-family: var(--font-dm-sans), 'DM Sans', sans-serif;
+}
+.landing-modal-body {
+  font-size: 0.82rem;
+  color: var(--muted);
+  line-height: 1.55;
+  margin-bottom: 22px;
+}
+.landing-modal-body strong { color: var(--ink); }
+.landing-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.header-team-name--link {
+  text-align: left;
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ink);
+  max-width: min(200px, 28vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.header-team-name--link:hover {
+  color: var(--kale);
+  text-decoration: underline;
+}
+
 /* ── MISC ── */
 .no-data { padding: 60px 32px; text-align: center; color: var(--muted); font-size: 0.8rem; }
 .sticky-agent { position: sticky; left: 0; background: var(--bg); z-index: 5; }

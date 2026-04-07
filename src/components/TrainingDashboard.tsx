@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   buildExportCsv,
   exportFilename,
@@ -42,8 +43,15 @@ import type { ProcessedDashboardData } from "@/lib/types";
 import { shareUrlForToken } from "@/lib/appPaths";
 import { snapshotWeekLabel } from "@/lib/snapshotLabel";
 import {
+  clearGgtActiveWorkspace,
+  readGgtTeam,
+  readGgtWorkspaceId,
+  setGgtActiveWorkspace,
+} from "@/lib/ggtStorage";
+import {
   fetchSnapshotById,
   fetchSnapshotByShareToken,
+  fetchWorkspaceById,
   getOrCreateWorkspace,
   insertSnapshot,
   listSnapshotMetas,
@@ -60,18 +68,8 @@ import {
   type PicklistId,
 } from "@/lib/picklistEngine";
 
-const GGT_TEAM_KEY = "ggt_team";
 const GGT_DATA_KEY = "ggt_data";
 const GGT_TAB_KEY = "ggt_tab";
-
-function readGgtTeam(): string | null {
-  try {
-    const t = localStorage.getItem(GGT_TEAM_KEY);
-    return t?.trim() ? t.trim() : null;
-  } catch {
-    return null;
-  }
-}
 
 function formatHistoryDate(iso: string): string {
   try {
@@ -1249,15 +1247,12 @@ export function TrainingDashboard({
   readOnly = false,
   initialToken,
 }: Props) {
+  const navigate = useNavigate();
   const [data, setData] = useState<ProcessedDashboardData | null>(null);
   const [shareToken, setShareToken] = useState<string | null>(null);
   const [remoteLoading, setRemoteLoading] = useState(!!initialToken);
   const [remoteError, setRemoteError] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
-  const [teamNameFromStorage, setTeamNameFromStorage] = useState<string | null>(
-    () => (readOnly || initialToken ? null : readGgtTeam())
-  );
-  const [teamStepInput, setTeamStepInput] = useState("");
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [snapshots, setSnapshots] = useState<SnapshotMeta[]>([]);
   const [activeSnapshotId, setActiveSnapshotId] = useState<string | null>(null);
@@ -1309,7 +1304,13 @@ export function TrainingDashboard({
   const setupReportInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (readOnly || initialToken || !teamNameFromStorage) return;
+    if (readOnly || initialToken) return;
+    const wsId = readGgtWorkspaceId();
+    const teamName = readGgtTeam();
+    if (!wsId && !teamName) {
+      navigate("/", { replace: true });
+      return;
+    }
     if (!supabaseConfigured) {
       setBootstrapLoading(false);
       return;
@@ -1318,9 +1319,21 @@ export function TrainingDashboard({
     setBootstrapLoading(true);
     (async () => {
       try {
-        const ws = await getOrCreateWorkspace(teamNameFromStorage);
-        if (cancelled) return;
-        setWorkspace(ws);
+        let ws: Workspace | null = null;
+        if (wsId) {
+          ws = await fetchWorkspaceById(wsId);
+        }
+        if (!ws && teamName) {
+          ws = await getOrCreateWorkspace(teamName);
+        }
+        if (!ws) {
+          if (!cancelled) navigate("/", { replace: true });
+          return;
+        }
+        if (!cancelled) {
+          setGgtActiveWorkspace(ws);
+          setWorkspace(ws);
+        }
         const metas = await listSnapshotMetas(ws.id);
         if (cancelled) return;
         setSnapshots(metas);
@@ -1349,6 +1362,7 @@ export function TrainingDashboard({
           setActiveSnapshotId(null);
           setShareToken(null);
           setLastSavedAt(null);
+          navigate("/", { replace: true });
         }
       } finally {
         if (!cancelled) setBootstrapLoading(false);
@@ -1357,7 +1371,7 @@ export function TrainingDashboard({
     return () => {
       cancelled = true;
     };
-  }, [readOnly, initialToken, teamNameFromStorage]);
+  }, [readOnly, initialToken, navigate]);
 
   useEffect(() => {
     if (readOnly || initialToken || !data) return;
@@ -1397,19 +1411,11 @@ export function TrainingDashboard({
 
   useEffect(() => {
     if (readOnly || initialToken) return;
-    if (!teamNameFromStorage || bootstrapLoading || data) return;
-    if (workspace && snapshots.length === 0) {
-      setSetupProgramName((prev) => prev || teamNameFromStorage);
+    if (!workspace || bootstrapLoading || data) return;
+    if (snapshots.length === 0) {
+      setSetupProgramName((prev) => prev || workspace.team_name);
     }
-  }, [
-    readOnly,
-    initialToken,
-    teamNameFromStorage,
-    bootstrapLoading,
-    data,
-    workspace,
-    snapshots.length,
-  ]);
+  }, [readOnly, initialToken, workspace, bootstrapLoading, data, snapshots.length]);
 
   useEffect(() => {
     if (!data?.program_name) return;
@@ -1525,7 +1531,7 @@ export function TrainingDashboard({
     if (!setupTexts.length) return;
     const name =
       setupProgramName.trim() ||
-      teamNameFromStorage ||
+      workspace?.team_name ||
       "Training Dashboard";
     await processAndApply(setupTexts, name);
   };
@@ -1924,40 +1930,26 @@ export function TrainingDashboard({
     return chips;
   }, [filters]);
 
-  const showTeamStep = !readOnly && !initialToken && !teamNameFromStorage;
   const showCsvSetup =
     !readOnly &&
     !initialToken &&
-    !!teamNameFromStorage &&
+    !!workspace &&
     !bootstrapLoading &&
     !data;
 
-  const onEnterTeam = () => {
-    const name = teamStepInput.trim();
-    if (!name) return;
-    if (!supabaseConfigured) {
-      alert(
-        "Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to save team workspaces."
-      );
-      return;
-    }
-    try {
-      localStorage.setItem(GGT_TEAM_KEY, name);
-    } catch {
-      /* ignore */
-    }
-    setTeamNameFromStorage(name);
+  const goToTeamManager = () => {
+    navigate("/");
   };
 
   const switchTeam = () => {
+    clearGgtActiveWorkspace();
     try {
-      localStorage.removeItem(GGT_TEAM_KEY);
       sessionStorage.removeItem(GGT_DATA_KEY);
       sessionStorage.removeItem(GGT_TAB_KEY);
     } catch {
       /* ignore */
     }
-    window.location.reload();
+    navigate("/");
   };
 
   const headerSubtitle = data
@@ -1976,51 +1968,12 @@ export function TrainingDashboard({
     );
   }
 
-  if (!readOnly && !initialToken && teamNameFromStorage && bootstrapLoading) {
+  if (!readOnly && !initialToken && bootstrapLoading) {
     return (
       <div className="setup-overlay" style={{ display: "flex" }}>
         <p style={{ color: "var(--muted)", fontSize: "0.9rem" }}>
           Loading dashboard…
         </p>
-      </div>
-    );
-  }
-
-  if (showTeamStep) {
-    return (
-      <div
-        className="setup-overlay"
-        style={{ display: "flex", overflow: "hidden" }}
-      >
-        <div className="setup-card setup-team-card">
-          <div className="setup-logo">gusto</div>
-          <h2>Welcome to the Gustie Guide Dashboard</h2>
-          <div className="setup-section">
-            <label htmlFor="ggtTeamName">Team Name</label>
-            <input
-              id="ggtTeamName"
-              type="text"
-              placeholder="e.g. TaskUs Payroll, TP Benefits..."
-              value={teamStepInput}
-              onChange={(e) => setTeamStepInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") onEnterTeam();
-              }}
-            />
-          </div>
-          <p className="setup-team-note">
-            Your team name is your workspace — anyone with this name can access
-            your data.
-          </p>
-          <button
-            type="button"
-            className="setup-start-btn"
-            disabled={!teamStepInput.trim()}
-            onClick={() => onEnterTeam()}
-          >
-            Enter Dashboard →
-          </button>
-        </div>
       </div>
     );
   }
@@ -2279,7 +2232,14 @@ export function TrainingDashboard({
           {!readOnly && workspace ? (
             <div className="header-team-block">
               <span className="header-team-label">Team</span>
-              <span className="header-team-name">{workspace.team_name}</span>
+              <button
+                type="button"
+                className="header-team-name header-team-name--link"
+                onClick={() => goToTeamManager()}
+                title="Back to team workspaces"
+              >
+                {workspace.team_name}
+              </button>
               <button
                 type="button"
                 className="header-switch-team"

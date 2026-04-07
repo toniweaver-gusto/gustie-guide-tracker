@@ -6,6 +6,13 @@ export type Workspace = {
   id: string;
   team_slug: string;
   team_name: string;
+  created_at?: string;
+};
+
+export type WorkspaceWithStats = Workspace & {
+  snapshot_count: number;
+  latest_uploaded_at: string | null;
+  latest_agent_count: number | null;
 };
 
 export type SnapshotSummary = {
@@ -21,6 +28,85 @@ export type SnapshotSummary = {
 
 /** History list only — avoids loading every snapshot’s JSON. */
 export type SnapshotMeta = Omit<SnapshotSummary, "processed_data">;
+
+export async function fetchWorkspaceById(id: string): Promise<Workspace | null> {
+  const { data, error } = await supabase
+    .from("workspaces")
+    .select("id, team_slug, team_name, created_at")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as Workspace) ?? null;
+}
+
+export async function listWorkspacesWithStats(): Promise<WorkspaceWithStats[]> {
+  const { data: workspaces, error: wErr } = await supabase
+    .from("workspaces")
+    .select("id, team_slug, team_name, created_at")
+    .order("team_name");
+  if (wErr) throw wErr;
+  const { data: snaps, error: sErr } = await supabase
+    .from("snapshots")
+    .select("workspace_id, uploaded_at, agent_count");
+  if (sErr) throw sErr;
+
+  const byWs = new Map<
+    string,
+    Array<{ uploaded_at: string; agent_count: number | null }>
+  >();
+  for (const s of snaps ?? []) {
+    const wid = s.workspace_id as string;
+    const list = byWs.get(wid) ?? [];
+    list.push({
+      uploaded_at: s.uploaded_at as string,
+      agent_count: s.agent_count as number | null,
+    });
+    byWs.set(wid, list);
+  }
+
+  return (workspaces ?? []).map((w) => {
+    const row = w as Workspace;
+    const list = byWs.get(row.id) ?? [];
+    list.sort((a, b) => b.uploaded_at.localeCompare(a.uploaded_at));
+    const latest = list[0];
+    return {
+      ...row,
+      snapshot_count: list.length,
+      latest_uploaded_at: latest?.uploaded_at ?? null,
+      latest_agent_count: latest?.agent_count ?? null,
+    };
+  });
+}
+
+export async function createWorkspace(teamName: string): Promise<Workspace> {
+  const team_name = teamName.trim();
+  const team_slug = teamSlug(team_name);
+  const { data, error } = await supabase
+    .from("workspaces")
+    .insert({ team_slug, team_name })
+    .select("id, team_slug, team_name, created_at")
+    .single();
+  if (error) throw error;
+  if (!data) throw new Error("create workspace returned no row");
+  return data as Workspace;
+}
+
+export async function updateWorkspaceTeamName(
+  id: string,
+  teamName: string
+): Promise<void> {
+  const team_name = teamName.trim();
+  const { error } = await supabase
+    .from("workspaces")
+    .update({ team_name })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteWorkspaceById(id: string): Promise<void> {
+  const { error } = await supabase.from("workspaces").delete().eq("id", id);
+  if (error) throw error;
+}
 
 export async function getOrCreateWorkspace(teamName: string): Promise<Workspace> {
   const team_name = teamName.trim();
