@@ -1,8 +1,16 @@
 export function formatMT(dateInput: string | Date): string {
-  const date =
-    typeof dateInput === "string" ? new Date(dateInput) : dateInput;
+  let date: Date;
+  if (typeof dateInput === "string") {
+    const str =
+      dateInput.endsWith("Z") || dateInput.includes("+")
+        ? dateInput
+        : dateInput + "Z";
+    date = new Date(str);
+  } else {
+    date = dateInput;
+  }
 
-  const formatted = date.toLocaleString("en-US", {
+  return date.toLocaleString("en-US", {
     timeZone: "America/Denver",
     month: "short",
     day: "numeric",
@@ -12,8 +20,4 @@ export function formatMT(dateInput: string | Date): string {
     hour12: true,
     timeZoneName: "short",
   });
-
-  // formatted looks like "Apr 7, 2026, 3:57 PM MDT"
-  // timeZoneName: 'short' already appends MDT/MST
-  return formatted;
 }
