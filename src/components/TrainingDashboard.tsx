@@ -21,6 +21,7 @@ import {
 } from "@/lib/dashboardFiltering";
 import { processCSVTexts } from "@/lib/csvParse";
 import { formatDate } from "@/lib/formatDate";
+import { formatMT } from "@/lib/formatMT";
 import {
   LOW_SCORE_THRESHOLD,
   daysSince,
@@ -70,19 +71,6 @@ import {
 
 const GGT_DATA_KEY = "ggt_data";
 const GGT_TAB_KEY = "ggt_tab";
-
-function formatHistoryDate(iso: string): string {
-  try {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return iso;
-    return d.toLocaleString(undefined, {
-      dateStyle: "medium",
-      timeStyle: "short",
-    });
-  } catch {
-    return iso;
-  }
-}
 
 export type { DashboardFilters };
 
@@ -220,19 +208,6 @@ function formatMonthKey(m: string): string {
     month: "long",
     year: "numeric",
   });
-}
-
-function formatLastSavedLabel(iso: string): string {
-  try {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return iso;
-    return d.toLocaleString(undefined, {
-      dateStyle: "medium",
-      timeStyle: "short",
-    });
-  } catch {
-    return iso;
-  }
 }
 
 function picklistAllValues(
@@ -2261,8 +2236,8 @@ export function TrainingDashboard({
             </span>
           ) : null}
           {!readOnly && lastSavedAt ? (
-            <span className="last-saved-chip" title={lastSavedAt}>
-              Last saved: {formatLastSavedLabel(lastSavedAt)}
+            <span className="last-saved-chip" title={formatMT(lastSavedAt)}>
+              Last saved: {formatMT(lastSavedAt)}
             </span>
           ) : null}
           {!readOnly && workspace && snapshots.length > 0 ? (
@@ -2313,7 +2288,7 @@ export function TrainingDashboard({
                         ) : null}
                       </div>
                       <div className="history-item-meta">
-                        {formatHistoryDate(s.uploaded_at)} ·{" "}
+                        {formatMT(s.uploaded_at)} ·{" "}
                         {s.agent_count ?? 0} agents
                       </div>
                     </button>

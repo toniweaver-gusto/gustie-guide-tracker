@@ -5,6 +5,7 @@ import {
   readGgtWorkspaceId,
   setGgtActiveWorkspace,
 } from "@/lib/ggtStorage";
+import { formatMT } from "@/lib/formatMT";
 import { supabaseConfigured } from "@/lib/supabaseClient";
 import {
   createWorkspace,
@@ -13,20 +14,6 @@ import {
   updateWorkspaceTeamName,
   type WorkspaceWithStats,
 } from "@/lib/workspaceApi";
-
-function formatCardDate(iso: string | null): string {
-  if (!iso) return "—";
-  try {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return iso;
-    return d.toLocaleString(undefined, {
-      dateStyle: "medium",
-      timeStyle: "short",
-    });
-  } catch {
-    return iso;
-  }
-}
 
 export function TeamLandingPage() {
   const navigate = useNavigate();
@@ -340,7 +327,7 @@ export function TeamLandingPage() {
                         </div>
                         <div>
                           <dt>Last upload</dt>
-                          <dd>{formatCardDate(t.latest_uploaded_at)}</dd>
+                          <dd>{formatMT(t.latest_uploaded_at)}</dd>
                         </div>
                         <div>
                           <dt>Agents (latest)</dt>
