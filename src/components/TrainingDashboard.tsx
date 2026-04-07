@@ -39,13 +39,17 @@ import {
   sanitizeProcessedDataForPostgres,
 } from "@/lib/sanitizeProcessedData";
 import type { ProcessedDashboardData } from "@/lib/types";
-import {
-  createDashboard,
-  fetchDashboardByToken,
-  fetchLatestDashboard,
-  patchDashboard,
-} from "@/lib/dashboardApi";
 import { shareUrlForToken } from "@/lib/appPaths";
+import { snapshotWeekLabel } from "@/lib/snapshotLabel";
+import {
+  fetchSnapshotById,
+  fetchSnapshotByShareToken,
+  getOrCreateWorkspace,
+  insertSnapshot,
+  listSnapshotMetas,
+  type SnapshotMeta,
+  type Workspace,
+} from "@/lib/workspaceApi";
 import { supabaseConfigured } from "@/lib/supabaseClient";
 import { FilterPicklist } from "@/components/FilterPicklist";
 import {
@@ -56,9 +60,31 @@ import {
   type PicklistId,
 } from "@/lib/picklistEngine";
 
-const SESSION_KEY = "uplimit_dashboard_token";
+const GGT_TEAM_KEY = "ggt_team";
 const GGT_DATA_KEY = "ggt_data";
 const GGT_TAB_KEY = "ggt_tab";
+
+function readGgtTeam(): string | null {
+  try {
+    const t = localStorage.getItem(GGT_TEAM_KEY);
+    return t?.trim() ? t.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+function formatHistoryDate(iso: string): string {
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    return d.toLocaleString(undefined, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+  } catch {
+    return iso;
+  }
+}
 
 export type { DashboardFilters };
 
@@ -1223,21 +1249,20 @@ export function TrainingDashboard({
   readOnly = false,
   initialToken,
 }: Props) {
-  const [data, setData] = useState<ProcessedDashboardData | null>(() => {
-    if (readOnly || initialToken) return null;
-    try {
-      const raw = sessionStorage.getItem(GGT_DATA_KEY);
-      if (!raw) return null;
-      return normalizeLoadedData(JSON.parse(raw));
-    } catch {
-      return null;
-    }
-  });
+  const [data, setData] = useState<ProcessedDashboardData | null>(null);
   const [shareToken, setShareToken] = useState<string | null>(null);
   const [remoteLoading, setRemoteLoading] = useState(!!initialToken);
   const [remoteError, setRemoteError] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
-  const [latestLoading, setLatestLoading] = useState(false);
+  const [teamNameFromStorage, setTeamNameFromStorage] = useState<string | null>(
+    () => (readOnly || initialToken ? null : readGgtTeam())
+  );
+  const [teamStepInput, setTeamStepInput] = useState("");
+  const [workspace, setWorkspace] = useState<Workspace | null>(null);
+  const [snapshots, setSnapshots] = useState<SnapshotMeta[]>([]);
+  const [activeSnapshotId, setActiveSnapshotId] = useState<string | null>(null);
+  const [bootstrapLoading, setBootstrapLoading] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const [setupProgramName, setSetupProgramName] = useState("");
   const [setupTexts, setSetupTexts] = useState<string[]>([]);
@@ -1252,7 +1277,6 @@ export function TrainingDashboard({
   const [activeTab, setActiveTab] = useState<TabId>(() => {
     if (readOnly || initialToken) return "overview";
     try {
-      if (!sessionStorage.getItem(GGT_DATA_KEY)) return "overview";
       const s = sessionStorage.getItem(GGT_TAB_KEY);
       if (s && (VALID_TAB_IDS as readonly string[]).includes(s)) {
         return s as TabId;
@@ -1285,51 +1309,55 @@ export function TrainingDashboard({
   const setupReportInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (readOnly || initialToken) return;
-    try {
-      const t = sessionStorage.getItem(SESSION_KEY);
-      if (t) setShareToken(t);
-    } catch {
-      /* ignore */
+    if (readOnly || initialToken || !teamNameFromStorage) return;
+    if (!supabaseConfigured) {
+      setBootstrapLoading(false);
+      return;
     }
-  }, [readOnly, initialToken]);
-
-  useEffect(() => {
-    if (readOnly || initialToken || !supabaseConfigured) return;
-    let skip = false;
-    try {
-      if (sessionStorage.getItem(GGT_DATA_KEY)) skip = true;
-    } catch {
-      /* ignore */
-    }
-    if (skip) return;
-
     let cancelled = false;
-    setLatestLoading(true);
+    setBootstrapLoading(true);
     (async () => {
       try {
-        const row = await fetchLatestDashboard();
+        const ws = await getOrCreateWorkspace(teamNameFromStorage);
         if (cancelled) return;
-        if (row) {
-          setData(normalizeLoadedData(row.processed_data));
-          setShareToken(row.share_token);
-          setLastSavedAt(row.updated_at ?? null);
-          try {
-            sessionStorage.setItem(SESSION_KEY, row.share_token);
-          } catch {
-            /* ignore */
-          }
+        setWorkspace(ws);
+        const metas = await listSnapshotMetas(ws.id);
+        if (cancelled) return;
+        setSnapshots(metas);
+        if (metas.length > 0) {
+          const full = await fetchSnapshotById(metas[0]!.id);
+          if (cancelled || !full) return;
+          setData(normalizeLoadedData(full.processed_data));
+          setActiveSnapshotId(full.id);
+          setShareToken(full.share_token);
+          setLastSavedAt(full.uploaded_at);
+        } else {
+          setData(null);
+          setActiveSnapshotId(null);
+          setShareToken(null);
+          setLastSavedAt(null);
         }
       } catch (e) {
         console.error(e);
+        alert(
+          "Could not load your team workspace. Check VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY and run migration 004 in Supabase."
+        );
+        if (!cancelled) {
+          setWorkspace(null);
+          setSnapshots([]);
+          setData(null);
+          setActiveSnapshotId(null);
+          setShareToken(null);
+          setLastSavedAt(null);
+        }
       } finally {
-        if (!cancelled) setLatestLoading(false);
+        if (!cancelled) setBootstrapLoading(false);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [readOnly, initialToken]);
+  }, [readOnly, initialToken, teamNameFromStorage]);
 
   useEffect(() => {
     if (readOnly || initialToken || !data) return;
@@ -1348,12 +1376,13 @@ export function TrainingDashboard({
       setRemoteError(false);
       try {
         if (!supabaseConfigured) throw new Error("not configured");
-        const row = await fetchDashboardByToken(initialToken);
+        const row = await fetchSnapshotByShareToken(initialToken);
         if (!row) throw new Error("not found");
         if (!cancelled) {
           setData(normalizeLoadedData(row.processed_data));
           setShareToken(row.share_token);
-          setLastSavedAt(row.updated_at ?? null);
+          setActiveSnapshotId(row.id);
+          setLastSavedAt(row.uploaded_at);
         }
       } catch {
         if (!cancelled) setRemoteError(true);
@@ -1365,6 +1394,22 @@ export function TrainingDashboard({
       cancelled = true;
     };
   }, [initialToken]);
+
+  useEffect(() => {
+    if (readOnly || initialToken) return;
+    if (!teamNameFromStorage || bootstrapLoading || data) return;
+    if (workspace && snapshots.length === 0) {
+      setSetupProgramName((prev) => prev || teamNameFromStorage);
+    }
+  }, [
+    readOnly,
+    initialToken,
+    teamNameFromStorage,
+    bootstrapLoading,
+    data,
+    workspace,
+    snapshots.length,
+  ]);
 
   useEffect(() => {
     if (!data?.program_name) return;
@@ -1387,6 +1432,8 @@ export function TrainingDashboard({
     const close = (e: MouseEvent) => {
       const el = e.target as HTMLElement;
       if (el.closest?.(".picklist-wrap")) return;
+      if (el.closest?.(".history-dropdown-wrap")) return;
+      setHistoryOpen(false);
       setPl((p) => {
         let changed = false;
         const n = { ...p };
@@ -1412,9 +1459,15 @@ export function TrainingDashboard({
     return () => window.removeEventListener("mousemove", onMove);
   }, [tooltip]);
 
-  const persist = useCallback(
+  const saveSnapshot = useCallback(
     async (next: ProcessedDashboardData) => {
       if (readOnly) return;
+      if (!workspace?.id) {
+        alert(
+          "Workspace not ready. Check Supabase configuration and migration 004, or use Switch Team."
+        );
+        return;
+      }
       setSaving(true);
       try {
         if (!supabaseConfigured) {
@@ -1424,41 +1477,27 @@ export function TrainingDashboard({
           ...next,
           _raw_scores: normalizeRawScores(next._raw_scores),
         });
-        let token = shareToken;
-        try {
-          token = token || sessionStorage.getItem(SESSION_KEY);
-        } catch {
-          /* ignore */
-        }
-
-        if (token) {
-          await patchDashboard(token, {
-            program_name: safe.program_name,
-            processed_data: safe,
-          });
-        } else {
-          const newToken = await createDashboard({
-            program_name: safe.program_name,
-            processed_data: safe,
-          });
-          try {
-            sessionStorage.setItem(SESSION_KEY, newToken);
-          } catch {
-            /* ignore */
-          }
-          setShareToken(newToken);
-        }
-        setLastSavedAt(new Date().toISOString());
+        const row = await insertSnapshot(workspace.id, {
+          label: snapshotWeekLabel(safe),
+          agent_count: safe.agents.length,
+          module_count: safe.modules.length,
+          processed_data: safe,
+        });
+        const metas = await listSnapshotMetas(workspace.id);
+        setSnapshots(metas);
+        setActiveSnapshotId(row.id);
+        setShareToken(row.share_token);
+        setLastSavedAt(row.uploaded_at);
       } catch (e) {
         console.error(e);
         alert(
-          "Could not save to Supabase. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, run migrations 002–003 (RPC functions) in the SQL editor, then try again."
+          "Could not save snapshot. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY and run migration 004 (workspaces + snapshots) in Supabase."
         );
       } finally {
         setSaving(false);
       }
     },
-    [readOnly, shareToken]
+    [readOnly, workspace]
   );
 
   const processAndApply = useCallback(
@@ -1477,14 +1516,17 @@ export function TrainingDashboard({
         _raw_scores: normalizeRawScores(d._raw_scores),
       });
       setData(cleaned);
-      if (!readOnly) await persist(cleaned);
+      if (!readOnly) await saveSnapshot(cleaned);
     },
-    [readOnly, persist]
+    [readOnly, saveSnapshot]
   );
 
   const launchDashboard = async () => {
     if (!setupTexts.length) return;
-    const name = setupProgramName.trim() || "Training Dashboard";
+    const name =
+      setupProgramName.trim() ||
+      teamNameFromStorage ||
+      "Training Dashboard";
     await processAndApply(setupTexts, name);
   };
 
@@ -1882,7 +1924,41 @@ export function TrainingDashboard({
     return chips;
   }, [filters]);
 
-  const showSetup = !readOnly && !data && !latestLoading;
+  const showTeamStep = !readOnly && !initialToken && !teamNameFromStorage;
+  const showCsvSetup =
+    !readOnly &&
+    !initialToken &&
+    !!teamNameFromStorage &&
+    !bootstrapLoading &&
+    !data;
+
+  const onEnterTeam = () => {
+    const name = teamStepInput.trim();
+    if (!name) return;
+    if (!supabaseConfigured) {
+      alert(
+        "Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to save team workspaces."
+      );
+      return;
+    }
+    try {
+      localStorage.setItem(GGT_TEAM_KEY, name);
+    } catch {
+      /* ignore */
+    }
+    setTeamNameFromStorage(name);
+  };
+
+  const switchTeam = () => {
+    try {
+      localStorage.removeItem(GGT_TEAM_KEY);
+      sessionStorage.removeItem(GGT_DATA_KEY);
+      sessionStorage.removeItem(GGT_TAB_KEY);
+    } catch {
+      /* ignore */
+    }
+    window.location.reload();
+  };
 
   const headerSubtitle = data
     ? readOnly
@@ -1900,12 +1976,51 @@ export function TrainingDashboard({
     );
   }
 
-  if (!readOnly && !initialToken && latestLoading) {
+  if (!readOnly && !initialToken && teamNameFromStorage && bootstrapLoading) {
     return (
       <div className="setup-overlay" style={{ display: "flex" }}>
         <p style={{ color: "var(--muted)", fontSize: "0.9rem" }}>
           Loading dashboard…
         </p>
+      </div>
+    );
+  }
+
+  if (showTeamStep) {
+    return (
+      <div
+        className="setup-overlay"
+        style={{ display: "flex", overflow: "hidden" }}
+      >
+        <div className="setup-card setup-team-card">
+          <div className="setup-logo">gusto</div>
+          <h2>Welcome to the Gustie Guide Dashboard</h2>
+          <div className="setup-section">
+            <label htmlFor="ggtTeamName">Team Name</label>
+            <input
+              id="ggtTeamName"
+              type="text"
+              placeholder="e.g. TaskUs Payroll, TP Benefits..."
+              value={teamStepInput}
+              onChange={(e) => setTeamStepInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") onEnterTeam();
+              }}
+            />
+          </div>
+          <p className="setup-team-note">
+            Your team name is your workspace — anyone with this name can access
+            your data.
+          </p>
+          <button
+            type="button"
+            className="setup-start-btn"
+            disabled={!teamStepInput.trim()}
+            onClick={() => onEnterTeam()}
+          >
+            Enter Dashboard →
+          </button>
+        </div>
       </div>
     );
   }
@@ -1923,7 +2038,7 @@ export function TrainingDashboard({
     );
   }
 
-  if (showSetup) {
+  if (showCsvSetup) {
     return (
       <>
         <div
@@ -1935,14 +2050,14 @@ export function TrainingDashboard({
         >
           <div className="setup-card">
             <div className="setup-logo">gusto</div>
-            <h2>Gustie Guide Training Dashboard</h2>
+            <h2>Upload your report</h2>
             <p className="setup-intro">
               Upload your Uplimit CSV export (or several — they merge
               automatically). Completions are deduplicated by agent and module so
               group rows don&apos;t inflate counts.
             </p>
             <div className="setup-section">
-              <label htmlFor="setupProgramName">Program name (optional)</label>
+              <label htmlFor="setupProgramName">Program name</label>
               <input
                 id="setupProgramName"
                 type="text"
@@ -2161,6 +2276,19 @@ export function TrainingDashboard({
       <header>
         <div className="logo">
           <div className="logo-mark">gusto</div>
+          {!readOnly && workspace ? (
+            <div className="header-team-block">
+              <span className="header-team-label">Team</span>
+              <span className="header-team-name">{workspace.team_name}</span>
+              <button
+                type="button"
+                className="header-switch-team"
+                onClick={() => switchTeam()}
+              >
+                Switch Team
+              </button>
+            </div>
+          ) : null}
           <div className="logo-text">
             <ProgramHeading programName={data.program_name} />
             <div className="header-sub">{headerSubtitle}</div>
@@ -2177,6 +2305,63 @@ export function TrainingDashboard({
               Last saved: {formatLastSavedLabel(lastSavedAt)}
             </span>
           ) : null}
+          {!readOnly && workspace && snapshots.length > 0 ? (
+            <div className="history-dropdown-wrap">
+              <button
+                type="button"
+                className="export-btn"
+                aria-expanded={historyOpen}
+                aria-haspopup="listbox"
+                onClick={() => setHistoryOpen((o) => !o)}
+              >
+                History ▾
+              </button>
+              {historyOpen ? (
+                <div className="history-panel" role="listbox">
+                  {snapshots.map((s, idx) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      role="option"
+                      aria-selected={activeSnapshotId === s.id}
+                      className={`history-item${
+                        activeSnapshotId === s.id ? " active" : ""
+                      }`}
+                      onClick={() => {
+                        void (async () => {
+                          try {
+                            const full = await fetchSnapshotById(s.id);
+                            if (!full) return;
+                            setData(normalizeLoadedData(full.processed_data));
+                            setActiveSnapshotId(full.id);
+                            setShareToken(full.share_token);
+                            setLastSavedAt(full.uploaded_at);
+                            setHistoryOpen(false);
+                          } catch (e) {
+                            console.error(e);
+                            alert("Could not load that snapshot.");
+                          }
+                        })();
+                      }}
+                    >
+                      <div className="history-item-row">
+                        <span className="history-item-label">
+                          {s.label ?? "Snapshot"}
+                        </span>
+                        {idx === 0 ? (
+                          <span className="history-badge-current">Current</span>
+                        ) : null}
+                      </div>
+                      <div className="history-item-meta">
+                        {formatHistoryDate(s.uploaded_at)} ·{" "}
+                        {s.agent_count ?? 0} agents
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           <div className="date-range">{dateRangeLabel}</div>
           {!readOnly && (
             <>
@@ -2185,6 +2370,7 @@ export function TrainingDashboard({
                 className="export-btn"
                 onClick={() => copyShareLink()}
                 title="Copy read-only link for managers"
+                disabled={!shareToken}
               >
                 Copy share link
               </button>

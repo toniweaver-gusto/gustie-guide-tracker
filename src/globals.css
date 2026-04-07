@@ -40,7 +40,51 @@ header {
   background: var(--surface);
   position: sticky; top: 0; z-index: 100;
 }
-.logo { display: flex; align-items: center; gap: 12px; }
+.logo { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.header-team-block {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  padding-left: 10px; border-left: 1px solid var(--border); min-width: 0;
+}
+.header-team-label {
+  font-size: 0.55rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--muted);
+}
+.header-team-name {
+  font-size: 0.78rem; font-weight: 600; color: var(--ink);
+  max-width: min(200px, 28vw); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.header-switch-team {
+  font-size: 0.62rem; font-weight: 600; color: var(--guava);
+  background: none; border: none; padding: 0; cursor: pointer;
+  text-decoration: underline; font-family: inherit;
+}
+.header-switch-team:hover { opacity: 0.85; }
+.history-dropdown-wrap { position: relative; }
+.history-panel {
+  position: absolute; top: 100%; right: 0; margin-top: 6px;
+  min-width: 288px; max-height: min(70vh, 420px); overflow-y: auto;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(34, 37, 37, 0.12); z-index: 220; padding: 6px;
+}
+.history-item {
+  display: block; width: 100%; text-align: left; padding: 10px 12px;
+  border: none; border-radius: 8px; background: transparent; cursor: pointer;
+  font: inherit; color: var(--ink);
+}
+.history-item:hover { background: var(--bg); }
+.history-item.active { background: var(--kale-dim); box-shadow: inset 0 0 0 1px var(--kale-mid); }
+.history-item-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  font-weight: 600; font-size: 0.72rem;
+}
+.history-item-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.history-item-meta {
+  font-size: 0.62rem; color: var(--muted); margin-top: 4px; font-family: var(--font-dm-mono), 'DM Mono', monospace;
+}
+.history-badge-current {
+  font-size: 0.52rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+  color: white; background: var(--kale); padding: 2px 8px; border-radius: 999px; flex-shrink: 0;
+}
 .logo-mark {
   font-family: var(--font-dm-sans), 'DM Sans', sans-serif; font-size: 1.4rem; font-weight: 600;
   color: var(--guava); letter-spacing: -0.04em; line-height: 1;
@@ -716,6 +760,8 @@ input[type="file"] { display: none; }
   transition: border-color 0.2s, color 0.2s; display: flex; align-items: center; gap: 6px;
 }
 .export-btn:hover { border-color: var(--guava); color: var(--guava); }
+.export-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.export-btn:disabled:hover { border-color: var(--border); color: var(--muted); }
 .export-btn svg { flex-shrink: 0; }
 
 .export-overlay {
@@ -792,6 +838,12 @@ input[type="file"] { display: none; }
 .setup-card h2 {
   font-family: var(--font-playfair), 'Playfair Display', serif; font-size: 1.6rem; font-weight: 700;
   color: var(--ink); margin-bottom: 8px; line-height: 1.2;
+}
+.setup-team-card h2 {
+  font-family: var(--font-playfair), 'Playfair Display', serif; font-size: 1.35rem; font-weight: 700;
+}
+.setup-team-note {
+  font-size: 0.72rem; color: var(--muted); line-height: 1.5; margin: 14px 0 22px;
 }
 .setup-card .setup-intro { font-size: 0.8rem; color: var(--muted); margin-bottom: 28px; line-height: 1.6; }
 .setup-section { margin-bottom: 22px; }
