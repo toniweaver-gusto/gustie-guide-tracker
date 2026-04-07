@@ -327,7 +327,11 @@ export function TeamLandingPage() {
                         </div>
                         <div>
                           <dt>Last upload</dt>
-                          <dd>{formatMT(t.latest_uploaded_at)}</dd>
+                          <dd>
+                            {t.latest_uploaded_at != null
+                              ? formatMT(t.latest_uploaded_at)
+                              : "—"}
+                          </dd>
                         </div>
                         <div>
                           <dt>Agents (latest)</dt>
