@@ -114,8 +114,6 @@ type ColumnIndices = {
   groupName: number;
   /** -1 if column missing */
   attempts: number;
-  /** -1 if column missing — “Total Attempts” in Uplimit exports */
-  totalAttempts: number;
 };
 
 function resolveColumnIndices(headers: string[]): ColumnIndices | null {
@@ -131,18 +129,7 @@ function resolveColumnIndices(headers: string[]): ColumnIndices | null {
   let attempts = want("attempts");
   if (attempts < 0) attempts = want("# attempts");
   if (attempts < 0) attempts = want("number of attempts");
-  let totalAttempts = want("total attempts");
-  if (totalAttempts < 0) totalAttempts = attempts;
-  return {
-    fullName,
-    contentWeek,
-    latestSub,
-    peName,
-    totalPoints,
-    groupName,
-    attempts,
-    totalAttempts,
-  };
+  return { fullName, contentWeek, latestSub, peName, totalPoints, groupName, attempts };
 }
 
 export function parseCSVRows(text: string): RawCSVRow[] {
@@ -196,18 +183,6 @@ export function parseCSVRows(text: string): RawCSVRow[] {
     } else {
       row["Attempts"] = "";
     }
-    if (colIx.totalAttempts >= 0) {
-      row["Total Attempts"] = (vals[colIx.totalAttempts] ?? "")
-        .trim()
-        .replace(/^"|"$/g, "");
-    } else {
-      row["Total Attempts"] = row["Attempts"];
-    }
-    row["TOTAL_ATTEMPTS"] = row["Total Attempts"];
-    row["total attempts"] = row["Total Attempts"];
-    row["full name"] = row["Full Name"];
-    row["content week name"] = row["Content Week Name"];
-    row["total points"] = row["Total Points"];
     rows.push(row);
   }
   return rows;
@@ -318,7 +293,6 @@ export function processCSVTexts(
     agent_groups,
     program_name: programName || "Training Dashboard",
     _raw_scores: normalizeRawScores(rawScoresFlat),
-    /** Full merged CSV rows for matrix attempt scans and tooling */
     _all_rows: allRows,
     _raw_attempts,
   };

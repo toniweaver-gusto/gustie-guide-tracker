@@ -873,17 +873,17 @@ header h1 span { color: var(--kale); }
 .mod-check.done-1 {
   background: var(--kale-dim);
   color: var(--kale);
-  border: 1px solid rgba(10, 128, 128, 0.3);
+  border: 1px solid rgba(10, 128, 128, 0.28);
 }
 .mod-check.done-2 {
-  background: #fef3cd;
-  color: #b45309;
-  border: 1px solid rgba(196, 122, 30, 0.3);
+  background: var(--warn-dim);
+  color: var(--warn);
+  border: 1px solid rgba(196, 122, 30, 0.35);
 }
 .mod-check.done-3 {
-  background: #fde8e8;
-  color: #c0392b;
-  border: 1px solid rgba(192, 57, 43, 0.3);
+  background: var(--danger-dim);
+  color: var(--danger);
+  border: 1px solid rgba(192, 57, 43, 0.28);
 }
 .mod-check.miss { background: var(--surface2); color: var(--faint); }
 .module-attempts-legend {
@@ -1017,16 +1017,12 @@ header h1 span { color: var(--kale); }
 .pct-pill.high { background: rgba(10,128,128,0.06); color: var(--kale); }
 .pct-pill.mid { background: var(--warn-dim); color: var(--warn); }
 .pct-pill.low { background: var(--danger-dim); color: var(--danger); }
-.module-table thead th.module-agent-th,
-.module-table tbody td.module-agent-cell {
+.module-agent-th {
+  text-align: center !important;
+  vertical-align: bottom;
   min-width: 52px;
-  text-align: center;
-  padding: 4px 2px;
-  vertical-align: middle;
-  box-sizing: border-box;
-}
-.module-table thead th.module-agent-th {
-  white-space: normal;
+  max-width: 88px;
+  white-space: normal !important;
   line-height: 1.25;
 }
 .module-agent-th-first {

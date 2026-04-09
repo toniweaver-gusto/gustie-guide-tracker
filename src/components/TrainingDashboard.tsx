@@ -47,10 +47,7 @@ import {
   sanitizeProcessedDataForPostgres,
 } from "@/lib/sanitizeProcessedData";
 import { CoachingPanel } from "@/components/CoachingPanel";
-import {
-  getAttemptsFromAllRows,
-  moduleMatrixAttemptClass,
-} from "@/lib/attemptsFromRows";
+import { getAttemptsFromAllRows } from "@/lib/attemptsFromRows";
 import type { ProcessedDashboardData, RawCSVRow } from "@/lib/types";
 import { shareUrlForToken } from "@/lib/appPaths";
 import { snapshotWeekLabel } from "@/lib/snapshotLabel";
@@ -520,6 +517,17 @@ function splitAgentName(full: string): { first: string; last: string } {
   return { first: parts[0]!, last: parts.slice(1).join(" ") };
 }
 
+function moduleCheckAttemptsClass(
+  data: ProcessedDashboardData,
+  agent: string,
+  mod: string
+): "done-1" | "done-2" | "done-3" {
+  const att = getAttemptsFromAllRows(data, agent, mod);
+  if (att <= 1) return "done-1";
+  if (att === 2) return "done-2";
+  return "done-3";
+}
+
 /** Tab: By Module — mirrors `renderModules` */
 function renderModules(
   data: ProcessedDashboardData,
@@ -595,13 +603,13 @@ function renderModules(
         {agents.map((a) => {
           const completedOn = data.agent_modules[a]?.[mod];
           if (completedOn) {
-            const cellAttempts = getAttemptsFromAllRows(data, a, mod);
-            const attCls = moduleMatrixAttemptClass(cellAttempts);
+            const tryCls = moduleCheckAttemptsClass(data, a, mod);
+            const tries = getAttemptsFromAllRows(data, a, mod);
             return (
-              <td key={a} className="module-agent-cell">
+              <td key={a}>
                 <span
-                  className={`mod-check done ${attCls}`}
-                  title={`${a} completed on ${formatDate(completedOn)} (${cellAttempts} attempt${cellAttempts !== 1 ? "s" : ""})`}
+                  className={`mod-check done ${tryCls}`}
+                  title={`${a} completed on ${formatDate(completedOn)} (${tries} attempt${tries !== 1 ? "s" : ""})`}
                 >
                   ✓
                 </span>
@@ -609,7 +617,7 @@ function renderModules(
             );
           }
           return (
-            <td key={a} className="module-agent-cell">
+            <td key={a}>
               <span
                 className="mod-check miss"
                 title={`${a} has not completed this`}
