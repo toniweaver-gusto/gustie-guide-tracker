@@ -1341,7 +1341,6 @@ export function TrainingDashboard({
   const [dailySelectedAgent, setDailySelectedAgent] = useState<string | null>(
     null
   );
-  const [dailySearch, setDailySearch] = useState("");
   const [slideout, setSlideout] = useState<{
     agent: string;
     date: string;
@@ -1492,7 +1491,6 @@ export function TrainingDashboard({
 
   useEffect(() => {
     setDailySelectedAgent(null);
-    setDailySearch("");
     setOverdueExpanded(new Set());
   }, [data?.program_name]);
 
@@ -1819,12 +1817,10 @@ export function TrainingDashboard({
         filters={filters}
         dailySelectedAgent={dailySelectedAgent}
         onSelectDailyAgent={setDailySelectedAgent}
-        dailySearch={dailySearch}
-        onDailySearchChange={setDailySearch}
         onDayCellClick={(agent, date) => setSlideout({ agent, date })}
       />
     );
-  }, [data, filters, dailySelectedAgent, dailySearch]);
+  }, [data, filters, dailySelectedAgent]);
 
   const modulesPane = useMemo(() => {
     if (!data) {

@@ -724,7 +724,7 @@ header h1 span { color: var(--kale); }
   min-height: 360px;
   border: 1px solid var(--border);
   border-radius: 10px;
-  overflow: hidden;
+  overflow: visible;
   background: var(--surface);
 }
 .daily-split-left {
@@ -734,26 +734,21 @@ header h1 span { color: var(--kale); }
   flex-direction: column;
   min-height: 0;
 }
-.daily-split-search {
+.daily-split-picklist {
   padding: 12px 14px;
   border-bottom: 1px solid var(--border);
 }
-.daily-split-search label {
-  display: block;
-  font-size: 0.58rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--muted);
-  margin-bottom: 6px;
-}
-.daily-split-search input {
+.daily-split-picklist .picklist-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  z-index: 1;
   width: 100%;
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  font-size: 0.78rem;
-  background: var(--surface);
+}
+.daily-split-picklist .picklist-wrap.open {
+  z-index: 90;
 }
 .daily-split-list {
   flex: 1;

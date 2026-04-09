@@ -1,20 +1,25 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type SyntheticEvent,
+} from "react";
 import type { DashboardFilters } from "@/lib/dashboardFilters";
 import {
   filterAgentsList,
   filterDatesForViews,
 } from "@/lib/dashboardFiltering";
 import { formatDate } from "@/lib/formatDate";
+import {
+  applyPicklistItemToggle,
+  picklistButtonLabel,
+  toggleAllPicklist,
+  type PicklistSelection,
+} from "@/lib/picklistEngine";
 import type { ProcessedDashboardData } from "@/lib/types";
-
-function filterDailyList(
-  agents: string[],
-  search: string
-): string[] {
-  const q = search.trim().toLowerCase();
-  if (!q) return agents;
-  return agents.filter((a) => a.toLowerCase().includes(q));
-}
+import { FilterPicklist } from "@/components/FilterPicklist";
 
 /** Sort agents by total completions (desc), then name. */
 function sortAgentsByCompletions(
@@ -52,8 +57,6 @@ type Props = {
   filters: DashboardFilters;
   dailySelectedAgent: string | null;
   onSelectDailyAgent: (agent: string | null) => void;
-  dailySearch: string;
-  onDailySearchChange: (s: string) => void;
   onDayCellClick: (agent: string, date: string) => void;
 };
 
@@ -62,22 +65,52 @@ export function DailySplitPane({
   filters,
   dailySelectedAgent,
   onSelectDailyAgent,
-  dailySearch,
-  onDailySearchChange,
   onDayCellClick,
 }: Props) {
   const agents = filterAgentsList(data, filters);
   const dates = filterDatesForViews(data, filters);
+
+  const allAgentValues = useMemo(
+    () => [...agents].sort((a, b) => a.localeCompare(b)),
+    [agents]
+  );
+
+  const agentScopeKey = useMemo(
+    () => allAgentValues.join("\0"),
+    [allAgentValues]
+  );
+
+  const [pickOpen, setPickOpen] = useState(false);
+  const [pickSearch, setPickSearch] = useState("");
+  const [pickSelected, setPickSelected] = useState<PicklistSelection>(null);
+
+  useEffect(() => {
+    setPickSelected(null);
+    setPickOpen(false);
+    setPickSearch("");
+  }, [agentScopeKey]);
+
+  useEffect(() => {
+    if (!pickOpen) return;
+    const close = (e: MouseEvent) => {
+      const el = e.target as HTMLElement;
+      if (el.closest?.(".daily-split-picklist")) return;
+      setPickOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [pickOpen]);
 
   const sortedAgents = useMemo(
     () => sortAgentsByCompletions(data, agents, dates),
     [data, agents, dates]
   );
 
-  const filteredAgents = useMemo(
-    () => filterDailyList(sortedAgents, dailySearch),
-    [sortedAgents, dailySearch]
-  );
+  const narrowedAgents = useMemo(() => {
+    if (pickSelected === null) return sortedAgents;
+    if (pickSelected.length === 0) return [];
+    return sortedAgents.filter((a) => pickSelected.includes(a));
+  }, [sortedAgents, pickSelected]);
 
   const selectDailyAgent = useCallback(
     (agent: string | null) => {
@@ -87,36 +120,68 @@ export function DailySplitPane({
   );
 
   useEffect(() => {
-    if (!filteredAgents.length) {
+    if (!narrowedAgents.length) {
       selectDailyAgent(null);
       return;
     }
     if (
       !dailySelectedAgent ||
-      !filteredAgents.includes(dailySelectedAgent)
+      !narrowedAgents.includes(dailySelectedAgent)
     ) {
-      selectDailyAgent(filteredAgents[0]!);
+      selectDailyAgent(narrowedAgents[0]!);
     }
-  }, [filteredAgents, dailySelectedAgent, selectDailyAgent]);
+  }, [narrowedAgents, dailySelectedAgent, selectDailyAgent]);
 
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
-      if (!filteredAgents.length || dailySelectedAgent == null) return;
-      const idx = filteredAgents.indexOf(dailySelectedAgent);
+      if (!narrowedAgents.length || dailySelectedAgent == null) return;
+      const idx = narrowedAgents.indexOf(dailySelectedAgent);
       if (idx < 0) return;
       e.preventDefault();
       const next =
         e.key === "ArrowDown"
-          ? Math.min(idx + 1, filteredAgents.length - 1)
+          ? Math.min(idx + 1, narrowedAgents.length - 1)
           : Math.max(idx - 1, 0);
-      selectDailyAgent(filteredAgents[next]!);
+      selectDailyAgent(narrowedAgents[next]!);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [filteredAgents, dailySelectedAgent, selectDailyAgent]);
+  }, [narrowedAgents, dailySelectedAgent, selectDailyAgent]);
+
+  const togglePickOpen = useCallback(() => {
+    setPickOpen((o) => !o);
+  }, []);
+
+  const togglePickAll = useCallback(
+    (e: SyntheticEvent) => {
+      e.stopPropagation();
+      setPickSelected((s) => toggleAllPicklist(s, allAgentValues));
+    },
+    [allAgentValues]
+  );
+
+  const togglePickItem = useCallback(
+    (val: string, checked: boolean) => {
+      setPickSelected((s) =>
+        applyPicklistItemToggle(s, val, checked, allAgentValues)
+      );
+    },
+    [allAgentValues]
+  );
+
+  const pickButtonLabel = useMemo(
+    () =>
+      picklistButtonLabel(
+        pickSelected,
+        allAgentValues,
+        "All Agents",
+        "No agents"
+      ),
+    [pickSelected, allAgentValues]
+  );
 
   const byMonth: Record<string, string[]> = {};
   dates.forEach((d) => {
@@ -163,29 +228,34 @@ export function DailySplitPane({
   return (
     <div className="daily-split-wrap">
       <div className="daily-split-left" ref={listRef}>
-        <div className="daily-split-search">
-          <label htmlFor="daily-agent-search">Search agents</label>
-          <input
-            id="daily-agent-search"
-            type="search"
-            placeholder="Filter list…"
-            value={dailySearch}
-            onChange={(e) => onDailySearchChange(e.target.value)}
+        <div className="daily-split-picklist">
+          <FilterPicklist
+            label="Agents"
+            buttonLabel={pickButtonLabel}
+            allValues={allAgentValues}
+            selected={pickSelected}
+            open={pickOpen}
+            search={pickSearch}
+            onToggleOpen={togglePickOpen}
+            onSearchChange={setPickSearch}
+            onToggleAll={togglePickAll}
+            onToggleItem={togglePickItem}
           />
         </div>
         <div className="daily-split-list" role="listbox" aria-label="Agents">
-          {filteredAgents.length === 0 && sortedAgents.length > 0 ? (
+          {pickSelected !== null && pickSelected.length === 0 ? (
             <div className="empty-state empty-state--in-split">
               <div className="empty-state-icon" aria-hidden>
-                🔍
+                👤
               </div>
-              <div className="empty-state-title">No agents match search</div>
+              <div className="empty-state-title">No agents selected</div>
               <div className="empty-state-msg">
-                Clear the search box or type a different name.
+                Use <strong>Select All</strong> in the Agents picklist above, or
+                choose one or more agents.
               </div>
             </div>
           ) : null}
-          {filteredAgents.map((a) => {
+          {narrowedAgents.map((a) => {
             const tot = dates.reduce(
               (s, d) => s + (data.agent_daily[a]?.[d] || 0),
               0
@@ -299,5 +369,3 @@ export function DailySplitPane({
     </div>
   );
 }
-
-export { filterDailyList };
