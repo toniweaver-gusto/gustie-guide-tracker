@@ -1475,11 +1475,17 @@ export function TrainingDashboard({
   useEffect(() => {
     if (!data) return;
     const keys = collectMonthKeys(data);
-    const now = new Date();
-    const label = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
     const base = initialPicklistState();
-    if (keys.includes(label)) {
-      base.month = { ...base.month, selected: [label] };
+    if (keys.length > 0) {
+      const monthLabels = keys.map((k) => formatMonthKey(k));
+      const nowLabel = new Date().toLocaleString("default", {
+        month: "long",
+        year: "numeric",
+      });
+      const matchIdx = monthLabels.indexOf(nowLabel);
+      const defaultKey =
+        matchIdx >= 0 ? keys[matchIdx]! : keys[keys.length - 1]!;
+      base.month = { ...base.month, selected: [defaultKey] };
     }
     setPl(base);
   }, [data]);

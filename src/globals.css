@@ -675,7 +675,7 @@ header h1 span { color: var(--kale); }
 }
 
 /* ── CONTENT ── */
-.content { overflow-x: auto; }
+.content { overflow-x: auto; overflow-y: visible; }
 .tab-pane { display: none; }
 .tab-pane.active { display: block; }
 
@@ -1240,7 +1240,7 @@ input[type="file"] { display: none; }
 .section-block { margin-bottom: 36px; }
 
 /* ── AGENT SUMMARY TAB ── */
-.agent-wrap { padding: 24px 32px; }
+.agent-wrap { padding: 8px 32px 24px; }
 .agent-table { width: 100%; border-collapse: collapse; font-size: 0.72rem; }
 .agent-table-fixed { table-layout: fixed; width: 100%; }
 .agent-table-fixed th:nth-child(1),
@@ -1270,7 +1270,12 @@ input[type="file"] { display: none; }
   letter-spacing: 0.06em; color: var(--muted); padding: 7px 10px; text-align: left;
   border-bottom: 2px solid var(--border); white-space: nowrap; background: var(--bg);
 }
-.agent-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.agent-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+  scroll-margin-top: 60px;
+}
 .agent-table tr:hover td { background: var(--bg-blush); }
 .agent-table tr:last-child td { border-bottom: none; }
 .agent-name-cell { font-weight: 600; font-size: 0.73rem; }
