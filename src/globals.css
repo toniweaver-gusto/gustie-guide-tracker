@@ -432,12 +432,18 @@ header h1 span { color: var(--kale); }
 }
 .mgr-trend-pct-above {
   font-family: var(--font-dm-mono), 'DM Mono', monospace;
-  font-size: 0.62rem;
-  font-weight: 600;
-  color: var(--ink);
-  line-height: 1.1;
-  min-height: 14px;
+  font-size: 0.5rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--kale);
+  line-height: 1.15;
+  min-height: 12px;
   text-align: center;
+  max-width: 100%;
+  padding: 0 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .mgr-trend-bar-track {
   flex: 1;
@@ -1364,12 +1370,18 @@ input[type="file"] { display: none; }
 }
 .team-trend-pct-above {
   font-family: var(--font-dm-mono), 'DM Mono', monospace;
-  font-size: 0.62rem;
-  font-weight: 600;
-  color: var(--ink);
-  line-height: 1.1;
-  min-height: 14px;
+  font-size: 0.5rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--kale);
+  line-height: 1.15;
+  min-height: 12px;
   text-align: center;
+  max-width: 100%;
+  padding: 0 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .team-trend-bar-track {
   flex: 1;

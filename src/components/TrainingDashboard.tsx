@@ -19,7 +19,7 @@ import {
   filterModulesForViews,
 } from "@/lib/dashboardFiltering";
 import { processCSVTexts } from "@/lib/csvParse";
-import { formatDate } from "@/lib/formatDate";
+import { formatDate, formatWeekOfLabel } from "@/lib/formatDate";
 import { formatMT } from "@/lib/formatMT";
 import {
   countOverdueAssignments,
@@ -387,9 +387,11 @@ function renderOverview(
             <div
               key={t.weekStart}
               className={`team-trend-col${t.isCurrentWeek ? " current-week" : ""}`}
-              title={`${t.completions} completed out of ${t.assigned} assigned that week (${t.pct}% completion rate)`}
+              title={`Week of ${formatWeekOfLabel(t.weekStart)}: ${t.completions} completed out of ${t.assigned} assigned (${t.pct}%)`}
             >
-              <div className="team-trend-pct-above">{t.pct}%</div>
+              <div className="team-trend-pct-above">
+                {t.completions}/{t.assigned}
+              </div>
               <div className="team-trend-bar-track">
                 <div
                   className="team-trend-bar"

@@ -7,7 +7,7 @@ import {
   filterModulesForViews,
 } from "@/lib/dashboardFiltering";
 import { getWeekStart } from "@/lib/dashboardHelpers";
-import { formatDate } from "@/lib/formatDate";
+import { formatDate, formatWeekOfLabel } from "@/lib/formatDate";
 import {
   applyPicklistItemToggle,
   picklistButtonLabel,
@@ -475,9 +475,11 @@ export function ManagerViewPane({
                 <div
                   key={t.weekStart}
                   className={`mgr-trend-col${t.isCurrentWeek ? " mgr-trend-col--current" : ""}`}
-                  title={`${t.completions} completed out of ${t.assigned} assigned`}
+                  title={`Week of ${formatWeekOfLabel(t.weekStart)}: ${t.completions} completed out of ${t.assigned} assigned (${t.pct}%)`}
                 >
-                  <div className="mgr-trend-pct-above">{t.pct}%</div>
+                  <div className="mgr-trend-pct-above">
+                    {t.completions}/{t.assigned}
+                  </div>
                   <div className="mgr-trend-bar-track">
                     <div
                       className="mgr-trend-bar"
