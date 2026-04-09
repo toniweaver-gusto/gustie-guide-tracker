@@ -15,7 +15,7 @@ import {
   type PicklistSelection,
 } from "@/lib/picklistEngine";
 import type { ProcessedDashboardData } from "@/lib/types";
-import { CoachingPanel } from "@/components/CoachingPanel";
+import { buildCoachingAlerts } from "@/lib/coachingAlerts";
 import { FilterPicklist } from "@/components/FilterPicklist";
 
 type MgrSlice = {
@@ -565,7 +565,30 @@ export function ManagerViewPane({
           </table>
         </div>
 
-        <CoachingPanel data={data} agents={agents} modules={modules} />
+        {(() => {
+          const { alertsHtml, nextStepsHtml, hasAlerts } = buildCoachingAlerts(
+            data,
+            agents,
+            modules
+          );
+          if (!hasAlerts) return null;
+          return (
+            <>
+              {alertsHtml ? (
+                <div
+                  className="section-block upskill-alerts-section"
+                  dangerouslySetInnerHTML={{ __html: alertsHtml }}
+                />
+              ) : null}
+              {nextStepsHtml ? (
+                <div
+                  className="section-block next-steps-section"
+                  dangerouslySetInnerHTML={{ __html: nextStepsHtml }}
+                />
+              ) : null}
+            </>
+          );
+        })()}
 
         <div className="mgr-section">
           <div className="mgr-section-title">Agent breakdown</div>

@@ -46,7 +46,7 @@ import {
   normalizeRawScores,
   sanitizeProcessedDataForPostgres,
 } from "@/lib/sanitizeProcessedData";
-import { CoachingPanel } from "@/components/CoachingPanel";
+import { buildCoachingAlerts } from "@/lib/coachingAlerts";
 import { getAttemptsFromAllRows } from "@/lib/attemptsFromRows";
 import type { ProcessedDashboardData, RawCSVRow } from "@/lib/types";
 import { shareUrlForToken } from "@/lib/appPaths";
@@ -503,7 +503,30 @@ function renderOverview(
         </table>
       </div>
 
-      <CoachingPanel data={data} agents={agents} modules={modules} />
+      {(() => {
+        const { alertsHtml, nextStepsHtml, hasAlerts } = buildCoachingAlerts(
+          data,
+          agents,
+          modules
+        );
+        if (!hasAlerts) return null;
+        return (
+          <>
+            {alertsHtml ? (
+              <div
+                className="section-block upskill-alerts-section"
+                dangerouslySetInnerHTML={{ __html: alertsHtml }}
+              />
+            ) : null}
+            {nextStepsHtml ? (
+              <div
+                className="section-block next-steps-section"
+                dangerouslySetInnerHTML={{ __html: nextStepsHtml }}
+              />
+            ) : null}
+          </>
+        );
+      })()}
     </div>
   );
 }

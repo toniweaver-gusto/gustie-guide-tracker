@@ -911,97 +911,118 @@ header h1 span { color: var(--kale); }
   align-items: center;
   gap: 8px;
 }
-.coaching-wrap {
-  margin-top: 8px;
-}
-.coaching-panel-heading {
+/* ── Upskill Alerts & Next Steps (Overview / Manager) ── */
+.upskill-alerts-section .upskill-alerts-title {
+  font-family: var(--font-playfair), 'Playfair Display', serif;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--ink);
   margin-bottom: 14px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--danger);
+  display: inline-block;
 }
-.coaching-alerts {
+.next-steps-section .next-steps-title {
+  font-family: var(--font-playfair), 'Playfair Display', serif;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 14px;
+  margin-top: 8px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--guava);
+  display: inline-block;
+}
+.coaching-alerts-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin-bottom: 18px;
+  gap: 12px;
+  margin-bottom: 8px;
 }
 .coaching-alert {
-  padding: 12px 14px;
-  border-radius: 8px;
-  font-size: 0.78rem;
-  line-height: 1.45;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 10px;
   border: 1px solid var(--border);
 }
 .coaching-alert.low-completion {
-  background: var(--warn-dim);
-  border-color: rgba(196, 122, 30, 0.35);
+  background: var(--danger-dim);
+  border-color: rgba(192, 57, 43, 0.22);
 }
 .coaching-alert.high-attempts {
-  background: var(--danger-dim);
-  border-color: rgba(192, 57, 43, 0.25);
+  background: rgba(254, 243, 205, 0.65);
+  border-color: rgba(196, 122, 30, 0.35);
 }
-.coaching-at-risk {
-  margin-bottom: 18px;
+.coaching-alert-icon {
+  font-size: 1.15rem;
+  line-height: 1.2;
+  flex-shrink: 0;
 }
-.coaching-at-risk-title {
-  font-size: 0.62rem;
+.coaching-alert-body {
+  flex: 1;
+  min-width: 0;
+}
+.coaching-alert-title {
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--muted);
-  margin-bottom: 8px;
-}
-.coaching-at-risk-list {
-  margin: 0;
-  padding-left: 1.1rem;
-  font-size: 0.74rem;
-  line-height: 1.5;
+  font-size: 0.78rem;
   color: var(--ink);
+  margin-bottom: 6px;
+  line-height: 1.35;
 }
-.coaching-at-risk-reasons {
+.coaching-alert-desc {
+  font-size: 0.72rem;
   color: var(--muted);
-  font-weight: 400;
+  line-height: 1.55;
 }
-.coaching-next-steps {
-  margin: 0;
-  padding-left: 0;
+.next-steps-list {
   list-style: none;
-  counter-reset: coaching-step;
+  margin: 0;
+  padding: 0;
 }
 .next-step-item {
   display: flex;
-  gap: 12px;
+  flex-direction: row;
   align-items: flex-start;
-  margin-bottom: 10px;
-  font-size: 0.76rem;
-  line-height: 1.5;
-  color: var(--ink);
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
 }
 .next-step-num {
   flex-shrink: 0;
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
   border-radius: 999px;
-  background: var(--kale);
-  color: white;
-  font-size: 0.65rem;
+  background: var(--guava);
+  color: #fff;
+  font-size: 0.7rem;
   font-weight: 700;
-  font-family: var(--font-dm-mono), 'DM Mono', monospace;
+  font-family: var(--font-dm-sans), 'DM Sans', sans-serif;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   line-height: 1;
 }
 .next-step-text {
-  padding-top: 2px;
-}
-.manager-view-main .coaching-wrap .coaching-panel-heading {
-  font-family: var(--font-playfair), 'Playfair Display', serif;
-  font-size: 1rem;
-  font-weight: 700;
+  font-size: 0.76rem;
+  line-height: 1.55;
   color: var(--ink);
-  margin-bottom: 12px;
-  padding-bottom: 6px;
-  border-bottom: 2px solid var(--guava);
-  display: inline-block;
+  padding-top: 3px;
+  flex: 1;
+  min-width: 0;
+}
+.next-step-text .next-step-highlight {
+  color: var(--guava);
+  font-weight: 700;
+}
+.manager-view-main .upskill-alerts-section .upskill-alerts-title,
+.manager-view-main .next-steps-section .next-steps-title {
+  font-size: 1rem;
 }
 .mod-name-cell {
   font-size: 0.68rem; max-width: 260px; overflow: hidden;
