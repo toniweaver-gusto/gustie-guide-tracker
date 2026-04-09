@@ -1,52 +1,48 @@
 import type { ProcessedDashboardData, RawCSVRow } from "./types";
-import { normalizeSubmissionDate } from "./submissionDate";
-
-/** Parse Attempts column; default 1 when missing or invalid. */
-export function parseAttemptsField(row: RawCSVRow): number {
-  const raw = (row["Attempts"] ?? "").trim();
-  const n = parseInt(raw, 10);
-  if (Number.isFinite(n) && n >= 1) return n;
-  return 1;
-}
-
-function rowSubmissionIso(row: RawCSVRow): string | null {
-  const raw = (
-    row["Latest Submission Time"] ||
-    row["LATEST_SUBMISSION_TIME"] ||
-    ""
-  ).trim();
-  return normalizeSubmissionDate(raw) ?? (raw.length >= 10 ? raw.slice(0, 10) : null);
-}
 
 /**
- * Scan `_all_rows` for rows matching agent, module, and canonical completion date.
- * Returns null if no matching row (caller may fall back to `_raw_attempts`).
+ * Scan `_all_rows`: match agent + module, pick row with highest Total Points,
+ * then read Total Attempts (defaults to 1).
  */
-export function scanAttemptsFromAllRows(
+export function getCellAttemptsFromAllRows(
   rows: RawCSVRow[] | undefined,
-  agent: string,
-  mod: string,
-  completionIso: string
-): number | null {
-  if (!rows?.length) return null;
-  let maxA = 0;
-  let found = false;
-  for (const row of rows) {
-    const name = (row["Full Name"] || row["FULL_NAME"] || "").trim();
-    const m = (
-      row["Content Week Name"] ||
-      row["CONTENT_WEEK_NAME"] ||
-      ""
-    ).trim();
-    if (name !== agent || m !== mod) continue;
-    const d = rowSubmissionIso(row);
-    if (!d || d !== completionIso) continue;
-    found = true;
-    const a = parseAttemptsField(row);
-    if (a > maxA) maxA = a;
+  agentName: string,
+  moduleName: string
+): number {
+  if (!rows?.length) return 1;
+  let best: RawCSVRow | null = null;
+  let bestScore = -1;
+  for (const r of rows) {
+    const n =
+      (r["full name"] as string | undefined) ||
+      (r["FULL_NAME"] as string | undefined) ||
+      (r["Full Name"] as string | undefined) ||
+      "";
+    const m =
+      (r["content week name"] as string | undefined) ||
+      (r["CONTENT_WEEK_NAME"] as string | undefined) ||
+      (r["Content Week Name"] as string | undefined) ||
+      "";
+    if (n !== agentName || m !== moduleName) continue;
+    const s = parseFloat(
+      (r["total points"] as string | undefined) ||
+        (r["TOTAL_POINTS"] as string | undefined) ||
+        (r["Total Points"] as string | undefined) ||
+        "0"
+    );
+    if (s >= bestScore) {
+      bestScore = s;
+      best = r;
+    }
   }
-  if (!found) return null;
-  return Math.max(1, maxA);
+  if (!best) return 1;
+  const att = parseFloat(
+    (best["total attempts"] as string | undefined) ||
+      (best["TOTAL_ATTEMPTS"] as string | undefined) ||
+      (best["Total Attempts"] as string | undefined) ||
+      "1"
+  );
+  return Number.isNaN(att) || att < 1 ? 1 : att;
 }
 
 /** Prefer live scan of `_all_rows`; fall back to `_raw_attempts`. */
@@ -55,15 +51,10 @@ export function getAttemptsFromAllRows(
   agent: string,
   mod: string
 ): number {
-  const completionDate = data.agent_modules[agent]?.[mod];
-  if (!completionDate) return 1;
-  const scanned = scanAttemptsFromAllRows(
-    data._all_rows,
-    agent,
-    mod,
-    completionDate
-  );
-  if (scanned !== null) return scanned;
+  if (!data.agent_modules[agent]?.[mod]) return 1;
+  if (data._all_rows?.length) {
+    return getCellAttemptsFromAllRows(data._all_rows, agent, mod);
+  }
   const c = data._raw_attempts?.[agent]?.[mod];
   if (typeof c === "number" && c >= 1) return c;
   return 1;
@@ -107,9 +98,8 @@ export function buildRawAttemptsMap(
 ): Record<string, Record<string, number>> {
   const out: Record<string, Record<string, number>> = {};
   for (const [agent, mods] of Object.entries(compMap)) {
-    for (const [mod, date] of Object.entries(mods)) {
-      const n =
-        scanAttemptsFromAllRows(allRows, agent, mod, date) ?? 1;
+    for (const mod of Object.keys(mods)) {
+      const n = getCellAttemptsFromAllRows(allRows, agent, mod);
       if (!out[agent]) out[agent] = {};
       out[agent][mod] = n;
     }

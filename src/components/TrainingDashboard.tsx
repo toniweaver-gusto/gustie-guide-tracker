@@ -545,10 +545,12 @@ function moduleCheckAttemptsClass(
   agent: string,
   mod: string
 ): "done-1" | "done-2" | "done-3" {
-  const att = getAttemptsFromAllRows(data, agent, mod);
-  if (att <= 1) return "done-1";
-  if (att === 2) return "done-2";
-  return "done-3";
+  const cellAttempts = getAttemptsFromAllRows(data, agent, mod);
+  return cellAttempts >= 3
+    ? "done-3"
+    : cellAttempts >= 2
+      ? "done-2"
+      : "done-1";
 }
 
 /** Tab: By Module — mirrors `renderModules` */
