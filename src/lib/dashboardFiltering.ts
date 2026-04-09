@@ -59,3 +59,16 @@ export function filterDatesForViews(
     f.months!.some((mo) => d.startsWith(mo))
   );
 }
+
+/** Whether a completion date ISO matches the dashboard month/week filter (same rules as `filterDatesForViews`). */
+export function completionIsoMatchesDashboardFilters(
+  f: DashboardFilters,
+  iso: string
+): boolean {
+  if (f.months === null) return true;
+  if (f.months.length === 0) return false;
+  if (f.periodMode === "week") {
+    return f.months.includes(getWeekStart(iso));
+  }
+  return f.months.some((mo) => iso.startsWith(mo));
+}

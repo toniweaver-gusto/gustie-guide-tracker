@@ -3,6 +3,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { addDays } from "@/lib/periodMode";
 import type { DashboardFilters } from "@/lib/dashboardFilters";
 import {
+  completionIsoMatchesDashboardFilters,
   filterAgentsList,
   filterModulesForViews,
 } from "@/lib/dashboardFiltering";
@@ -17,7 +18,7 @@ import {
 import type { ProcessedDashboardData } from "@/lib/types";
 import {
   computeTeamCompletionTrend,
-  getLast10WeekStarts,
+  getManagerViewTrendWeekStarts,
 } from "@/lib/overviewMetrics";
 import { buildCoachingAlerts } from "@/lib/coachingAlerts";
 import { FilterPicklist } from "@/components/FilterPicklist";
@@ -226,36 +227,40 @@ export function ManagerViewPane({
     return { coverage, adherence, overdue, lastActive };
   }, [agents, modules, data, mgrFrom, mgrTo, todayWeek]);
 
-  const trend = useMemo(() => {
-    if (!agents.length || !modules.length) return [];
-    const { weekStarts, currentWeekStart } = getLast10WeekStarts();
-    return computeTeamCompletionTrend(weekStarts, data, agents, modules, {
-      currentWeekStart,
-      completionIsoOk: (iso) => inIsoRange(iso, mgrFrom, mgrTo),
-    });
-  }, [agents, modules, data, mgrFrom, mgrTo]);
+  const mgrChartWeeks = useMemo(
+    () => getManagerViewTrendWeekStarts(data, filters, mgrFrom, mgrTo),
+    [data, filters, mgrFrom, mgrTo]
+  );
 
-  const heatWeeks = useMemo(() => {
-    const set = new Set<string>();
-    modules.forEach((m) => {
-      const rd = data.module_dates[m];
-      if (rd) set.add(getWeekStart(rd));
-    });
-    agents.forEach((a) => {
-      Object.values(data.agent_modules[a] || {}).forEach((iso) => {
-        set.add(getWeekStart(iso));
-      });
-    });
-    return [...set].sort().slice(-12);
-  }, [modules, agents, data]);
+  const trend = useMemo(() => {
+    if (!agents.length || !modules.length || !mgrChartWeeks.length) return [];
+    const currentWeekStart = getWeekStart(
+      new Date().toISOString().slice(0, 10)
+    );
+    return computeTeamCompletionTrend(
+      mgrChartWeeks,
+      data,
+      agents,
+      modules,
+      {
+        currentWeekStart,
+        completionIsoOk: (iso) =>
+          inIsoRange(iso, mgrFrom, mgrTo) &&
+          completionIsoMatchesDashboardFilters(filters, iso),
+      }
+    );
+  }, [agents, modules, data, mgrFrom, mgrTo, filters, mgrChartWeeks]);
 
   const heatRows = useMemo(() => {
     return agents.slice(0, 40).map((a) => {
-      const cells = heatWeeks.map((wk) => {
+      const cells = mgrChartWeeks.map((wk) => {
         let n = 0;
         modules.forEach((m) => {
           const comp = data.agent_modules[a]?.[m];
-          if (comp && getWeekStart(comp) === wk) n++;
+          if (!comp || getWeekStart(comp) !== wk) return;
+          if (!inIsoRange(comp, mgrFrom, mgrTo)) return;
+          if (!completionIsoMatchesDashboardFilters(filters, comp)) return;
+          n++;
         });
         const intensity =
           n === 0 ? 0 : n === 1 ? 1 : n < 3 ? 2 : 3;
@@ -263,7 +268,7 @@ export function ManagerViewPane({
       });
       return { a, cells };
     });
-  }, [agents, heatWeeks, modules, data.agent_modules]);
+  }, [agents, mgrChartWeeks, modules, data.agent_modules, mgrFrom, mgrTo, filters]);
 
   const missedModules = useMemo(() => {
     const rows: { mod: string; gap: number }[] = [];
@@ -500,7 +505,7 @@ export function ManagerViewPane({
               <thead>
                 <tr>
                   <th className="mgr-heatmap-agent">Agent</th>
-                  {heatWeeks.map((w) => (
+                  {mgrChartWeeks.map((w) => (
                     <th key={w} className="mgr-heatmap-wk">
                       {w.slice(5)}
                     </th>

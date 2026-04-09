@@ -1,6 +1,7 @@
 import type { DashboardFilters } from "@/lib/dashboardFilters";
 import {
   filterAgentsList,
+  filterDatesForViews,
   filterModulesForViews,
 } from "@/lib/dashboardFiltering";
 import { getWeekStart } from "@/lib/dashboardHelpers";
@@ -45,6 +46,36 @@ export function getLast10WeekStarts(): {
     weekStarts: buildLastNWeekStarts(today, 10),
     currentWeekStart,
   };
+}
+
+function inIsoRange(iso: string, from: string, to: string): boolean {
+  if (from && iso < from) return false;
+  if (to && iso > to) return false;
+  return true;
+}
+
+/**
+ * Weeks shown on Manager View trend + heatmap: last 10 weeks when no month or
+ * Manager date range is set; otherwise unique week starts from `all_dates` after
+ * applying the top-bar filter and optional Manager From/To on those dates.
+ */
+export function getManagerViewTrendWeekStarts(
+  data: ProcessedDashboardData,
+  filters: DashboardFilters,
+  mgrFrom: string,
+  mgrTo: string
+): string[] {
+  const noTopMonth = filters.months === null;
+  const noMgrRange = !mgrFrom && !mgrTo;
+  if (noTopMonth && noMgrRange) {
+    return getLast10WeekStarts().weekStarts;
+  }
+  const baseDates = filterDatesForViews(data, filters);
+  const rangeDates =
+    mgrFrom || mgrTo
+      ? baseDates.filter((d) => inIsoRange(d, mgrFrom, mgrTo))
+      : baseDates;
+  return [...new Set(rangeDates.map((d) => getWeekStart(d)))].sort();
 }
 
 export type TeamTrendWeek = {
