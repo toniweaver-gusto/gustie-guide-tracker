@@ -870,8 +870,139 @@ header h1 span { color: var(--kale); }
   display: inline-block; width: 20px; height: 20px; border-radius: 4px;
   text-align: center; line-height: 20px; font-size: 0.6rem;
 }
-.mod-check.done { background: var(--kale-dim); color: var(--kale); }
+.mod-check.done-1 {
+  background: var(--kale-dim);
+  color: var(--kale);
+  border: 1px solid rgba(10, 128, 128, 0.28);
+}
+.mod-check.done-2 {
+  background: var(--warn-dim);
+  color: var(--warn);
+  border: 1px solid rgba(196, 122, 30, 0.35);
+}
+.mod-check.done-3 {
+  background: var(--danger-dim);
+  color: var(--danger);
+  border: 1px solid rgba(192, 57, 43, 0.28);
+}
 .mod-check.miss { background: var(--surface2); color: var(--faint); }
+.module-attempts-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px 20px;
+  margin-bottom: 18px;
+  padding: 12px 14px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.72rem;
+  color: var(--ink);
+}
+.module-attempts-legend-label {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.58rem;
+  color: var(--muted);
+}
+.module-attempts-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.coaching-wrap {
+  margin-top: 8px;
+}
+.coaching-panel-heading {
+  margin-bottom: 14px;
+}
+.coaching-alerts {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.coaching-alert {
+  padding: 12px 14px;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  border: 1px solid var(--border);
+}
+.coaching-alert.low-completion {
+  background: var(--warn-dim);
+  border-color: rgba(196, 122, 30, 0.35);
+}
+.coaching-alert.high-attempts {
+  background: var(--danger-dim);
+  border-color: rgba(192, 57, 43, 0.25);
+}
+.coaching-at-risk {
+  margin-bottom: 18px;
+}
+.coaching-at-risk-title {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.coaching-at-risk-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.74rem;
+  line-height: 1.5;
+  color: var(--ink);
+}
+.coaching-at-risk-reasons {
+  color: var(--muted);
+  font-weight: 400;
+}
+.coaching-next-steps {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+  counter-reset: coaching-step;
+}
+.next-step-item {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 10px;
+  font-size: 0.76rem;
+  line-height: 1.5;
+  color: var(--ink);
+}
+.next-step-num {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--kale);
+  color: white;
+  font-size: 0.65rem;
+  font-weight: 700;
+  font-family: var(--font-dm-mono), 'DM Mono', monospace;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+.next-step-text {
+  padding-top: 2px;
+}
+.manager-view-main .coaching-wrap .coaching-panel-heading {
+  font-family: var(--font-playfair), 'Playfair Display', serif;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 12px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--guava);
+  display: inline-block;
+}
 .mod-name-cell {
   font-size: 0.68rem; max-width: 260px; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; color: var(--ink);

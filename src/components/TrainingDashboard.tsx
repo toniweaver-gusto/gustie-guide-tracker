@@ -46,7 +46,9 @@ import {
   normalizeRawScores,
   sanitizeProcessedDataForPostgres,
 } from "@/lib/sanitizeProcessedData";
-import type { ProcessedDashboardData } from "@/lib/types";
+import { CoachingPanel } from "@/components/CoachingPanel";
+import { getAttemptsFromAllRows } from "@/lib/attemptsFromRows";
+import type { ProcessedDashboardData, RawCSVRow } from "@/lib/types";
 import { shareUrlForToken } from "@/lib/appPaths";
 import { snapshotWeekLabel } from "@/lib/snapshotLabel";
 import {
@@ -500,6 +502,8 @@ function renderOverview(
           </tbody>
         </table>
       </div>
+
+      <CoachingPanel data={data} agents={agents} modules={modules} />
     </div>
   );
 }
@@ -511,6 +515,17 @@ function splitAgentName(full: string): { first: string; last: string } {
   if (parts.length === 0) return { first: "", last: "" };
   if (parts.length === 1) return { first: parts[0]!, last: "" };
   return { first: parts[0]!, last: parts.slice(1).join(" ") };
+}
+
+function moduleCheckAttemptsClass(
+  data: ProcessedDashboardData,
+  agent: string,
+  mod: string
+): "done-1" | "done-2" | "done-3" {
+  const att = getAttemptsFromAllRows(data, agent, mod);
+  if (att <= 1) return "done-1";
+  if (att === 2) return "done-2";
+  return "done-3";
 }
 
 /** Tab: By Module — mirrors `renderModules` */
@@ -588,11 +603,13 @@ function renderModules(
         {agents.map((a) => {
           const completedOn = data.agent_modules[a]?.[mod];
           if (completedOn) {
+            const tryCls = moduleCheckAttemptsClass(data, a, mod);
+            const tries = getAttemptsFromAllRows(data, a, mod);
             return (
               <td key={a}>
                 <span
-                  className="mod-check done"
-                  title={`${a} completed on ${formatDate(completedOn)}`}
+                  className={`mod-check done ${tryCls}`}
+                  title={`${a} completed on ${formatDate(completedOn)} (${tries} attempt${tries !== 1 ? "s" : ""})`}
                 >
                   ✓
                 </span>
@@ -621,6 +638,27 @@ function renderModules(
 
   return (
     <div className="module-wrap">
+      <div className="module-attempts-legend" aria-label="Completion attempts key">
+        <span className="module-attempts-legend-label">Checkmarks:</span>
+        <span className="module-attempts-legend-item">
+          <span className="mod-check done done-1" aria-hidden>
+            ✓
+          </span>
+          <span>1 attempt</span>
+        </span>
+        <span className="module-attempts-legend-item">
+          <span className="mod-check done done-2" aria-hidden>
+            ✓
+          </span>
+          <span>2 attempts</span>
+        </span>
+        <span className="module-attempts-legend-item">
+          <span className="mod-check done done-3" aria-hidden>
+            ✓
+          </span>
+          <span>3+ attempts</span>
+        </span>
+      </div>
       <table className="module-table">
         <thead>{moduleTableHeader}</thead>
         <tbody>{moduleTableBodyRows}</tbody>
@@ -1247,8 +1285,31 @@ type Props = {
   initialToken?: string;
 };
 
+function normalizeRawAttemptsMap(
+  raw: unknown
+): Record<string, Record<string, number>> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: Record<string, Record<string, number>> = {};
+  for (const [a, mods] of Object.entries(raw as Record<string, unknown>)) {
+    if (!mods || typeof mods !== "object" || Array.isArray(mods)) continue;
+    out[a] = {};
+    for (const [m, v] of Object.entries(mods as Record<string, unknown>)) {
+      if (typeof v === "number" && Number.isFinite(v) && v >= 1) {
+        out[a][m] = Math.floor(v);
+      }
+    }
+  }
+  return out;
+}
+
 function normalizeLoadedData(raw: unknown): ProcessedDashboardData {
   const d = raw as Partial<ProcessedDashboardData>;
+  const allRows: RawCSVRow[] = Array.isArray(d._all_rows)
+    ? (d._all_rows as unknown[]).filter(
+        (r): r is RawCSVRow =>
+          Boolean(r) && typeof r === "object" && !Array.isArray(r)
+      )
+    : [];
   return sanitizeProcessedDataForPostgres({
     program_name: d.program_name ?? "Training Dashboard",
     agents: d.agents ?? [],
@@ -1262,6 +1323,8 @@ function normalizeLoadedData(raw: unknown): ProcessedDashboardData {
     group_names: d.group_names ?? [],
     agent_groups: d.agent_groups ?? {},
     _raw_scores: normalizeRawScores(d._raw_scores),
+    _all_rows: allRows,
+    _raw_attempts: normalizeRawAttemptsMap(d._raw_attempts),
   });
 }
 

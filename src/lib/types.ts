@@ -1,3 +1,6 @@
+/** Single parsed CSV row (all header keys preserved). */
+export type RawCSVRow = Record<string, string>;
+
 /** Mirrors the HTML template `DATA` object after CSV processing */
 export type ProcessedDashboardData = {
   agents: string[];
@@ -15,6 +18,10 @@ export type ProcessedDashboardData = {
   program_name: string;
   /** Per agent, per module: best Total Points (0–100). Nested so JSONB has no \\0 in keys. */
   _raw_scores: Record<string, Record<string, number>>;
+  /** Full merged raw rows from CSV uploads (for attempt scans, auditing). */
+  _all_rows: RawCSVRow[];
+  /** Cached attempts per completion (built at import; display helpers prefer `_all_rows`). */
+  _raw_attempts: Record<string, Record<string, number>>;
 };
 
 export type DashboardRow = {

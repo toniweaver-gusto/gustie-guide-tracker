@@ -15,6 +15,7 @@ import {
   type PicklistSelection,
 } from "@/lib/picklistEngine";
 import type { ProcessedDashboardData } from "@/lib/types";
+import { CoachingPanel } from "@/components/CoachingPanel";
 import { FilterPicklist } from "@/components/FilterPicklist";
 
 type MgrSlice = {
@@ -563,6 +564,8 @@ export function ManagerViewPane({
             </tbody>
           </table>
         </div>
+
+        <CoachingPanel data={data} agents={agents} modules={modules} />
 
         <div className="mgr-section">
           <div className="mgr-section-title">Agent breakdown</div>

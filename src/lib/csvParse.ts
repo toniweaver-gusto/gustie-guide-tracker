@@ -1,7 +1,10 @@
-import type { ProcessedDashboardData } from "./types";
+import { buildRawAttemptsMap } from "./attemptsFromRows";
+import { normalizeSubmissionDate } from "./submissionDate";
+import type { ProcessedDashboardData, RawCSVRow } from "./types";
 import { normalizeRawScores } from "./sanitizeProcessedData";
 
-export type RawCSVRow = Record<string, string>;
+export type { RawCSVRow } from "./types";
+export { normalizeSubmissionDate } from "./submissionDate";
 
 export function stripBom(text: string): string {
   if (!text.length) return text;
@@ -109,6 +112,8 @@ type ColumnIndices = {
   peName: number;
   totalPoints: number;
   groupName: number;
+  /** -1 if column missing */
+  attempts: number;
 };
 
 function resolveColumnIndices(headers: string[]): ColumnIndices | null {
@@ -121,31 +126,10 @@ function resolveColumnIndices(headers: string[]): ColumnIndices | null {
   const peName = want("pe name");
   const totalPoints = want("total points");
   const groupName = want("group name");
-  return { fullName, contentWeek, latestSub, peName, totalPoints, groupName };
-}
-
-/**
- * Normalize Latest Submission Time to YYYY-MM-DD for sorting and grouping.
- */
-export function normalizeSubmissionDate(raw: string): string | null {
-  const ts = raw.trim();
-  if (!ts) return null;
-  const iso = ts.slice(0, 10);
-  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
-  const parsed = new Date(ts);
-  if (!Number.isNaN(parsed.getTime())) {
-    const y = parsed.getFullYear();
-    const m = String(parsed.getMonth() + 1).padStart(2, "0");
-    const day = String(parsed.getDate()).padStart(2, "0");
-    return `${y}-${m}-${day}`;
-  }
-  const mdy = ts.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-  if (mdy) {
-    const mm = mdy[1].padStart(2, "0");
-    const dd = mdy[2].padStart(2, "0");
-    return `${mdy[3]}-${mm}-${dd}`;
-  }
-  return null;
+  let attempts = want("attempts");
+  if (attempts < 0) attempts = want("# attempts");
+  if (attempts < 0) attempts = want("number of attempts");
+  return { fullName, contentWeek, latestSub, peName, totalPoints, groupName, attempts };
 }
 
 export function parseCSVRows(text: string): RawCSVRow[] {
@@ -192,6 +176,13 @@ export function parseCSVRows(text: string): RawCSVRow[] {
     row["TOTAL_POINTS"] = row["Total Points"];
     row["PE_NAME"] = row["PE Name"];
     row["GROUP_NAME"] = row["Group Name"];
+    if (colIx.attempts >= 0) {
+      row["Attempts"] = (vals[colIx.attempts] ?? "")
+        .trim()
+        .replace(/^"|"$/g, "");
+    } else {
+      row["Attempts"] = "";
+    }
     rows.push(row);
   }
   return rows;
@@ -227,8 +218,9 @@ export function processCSVTexts(
     const mod = row["Content Week Name"];
     const ts = row["Latest Submission Time"];
     if (!name || !mod || !ts) return;
-    const date = ts.trim().slice(0, 10);
-    if (!date) return;
+    const date =
+      normalizeSubmissionDate(ts) ?? ts.trim().slice(0, 10);
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
     if (!compMap[name]) compMap[name] = {};
     if (!compMap[name][mod] || date < compMap[name][mod]) {
       compMap[name][mod] = date;
@@ -286,6 +278,8 @@ export function processCSVTexts(
     }
   });
 
+  const _raw_attempts = buildRawAttemptsMap(allRows, compMap);
+
   return {
     agents,
     modules,
@@ -299,6 +293,8 @@ export function processCSVTexts(
     agent_groups,
     program_name: programName || "Training Dashboard",
     _raw_scores: normalizeRawScores(rawScoresFlat),
+    _all_rows: allRows,
+    _raw_attempts,
   };
 }
 
