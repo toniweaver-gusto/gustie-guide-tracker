@@ -1343,6 +1343,152 @@ input[type="file"] { display: none; }
 .weekly-action-btn:hover {
   opacity: 0.92;
 }
+
+.what-now-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  margin-bottom: 20px;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--ink);
+}
+.what-now-banner--warn {
+  background: var(--warn-dim);
+  border-color: rgba(196, 122, 30, 0.28);
+}
+.what-now-icon {
+  flex-shrink: 0;
+  font-size: 1.1rem;
+  line-height: 1.2;
+}
+.what-now-text {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+}
+.what-now-link {
+  display: inline;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-weight: 700;
+  color: var(--kale);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.what-now-link:hover {
+  color: var(--guava);
+}
+
+.welcome-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(34, 37, 37, 0.45);
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+.welcome-overlay--visible {
+  opacity: 1;
+}
+.welcome-modal {
+  width: 100%;
+  max-width: 400px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 28px 26px 24px;
+  box-shadow: 0 18px 48px rgba(34, 37, 37, 0.14);
+}
+.welcome-emoji {
+  font-size: 2.5rem;
+  line-height: 1;
+  text-align: center;
+  margin-bottom: 12px;
+}
+.welcome-title {
+  font-family: var(--font-playfair), 'Playfair Display', serif;
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: var(--ink);
+  text-align: center;
+  margin: 0 0 18px;
+  letter-spacing: -0.02em;
+}
+.welcome-step-list {
+  list-style: none;
+  margin: 0 0 20px;
+  padding: 0;
+}
+.welcome-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-size: 0.82rem;
+  color: var(--ink);
+  line-height: 1.45;
+  margin-bottom: 10px;
+}
+.welcome-step:last-child {
+  margin-bottom: 0;
+}
+.welcome-step-num {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--kale-dim);
+  color: var(--kale);
+  font-family: var(--font-dm-mono), 'DM Mono', monospace;
+  font-size: 0.65rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+.welcome-dismiss-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.72rem;
+  color: var(--muted);
+  cursor: pointer;
+  margin-bottom: 16px;
+  user-select: none;
+}
+.welcome-dismiss-label input {
+  accent-color: var(--kale);
+}
+.welcome-go-btn {
+  width: 100%;
+  font-family: var(--font-dm-sans), 'DM Sans', sans-serif;
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 12px 18px;
+  border-radius: 8px;
+  border: none;
+  background: var(--guava);
+  color: white;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.welcome-go-btn:hover {
+  opacity: 0.9;
+}
+
 .team-trend-section {
   margin-bottom: 28px;
 }

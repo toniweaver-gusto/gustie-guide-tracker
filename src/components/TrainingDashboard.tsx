@@ -80,6 +80,27 @@ import {
 const GGT_DATA_KEY = "ggt_data";
 const GGT_TAB_KEY = "ggt_tab";
 
+export type TabId =
+  | "overview"
+  | "daily"
+  | "modules"
+  | "agents"
+  | "overdue"
+  | "roster"
+  | "howto"
+  | "manager";
+
+const VALID_TAB_IDS: readonly TabId[] = [
+  "overview",
+  "daily",
+  "modules",
+  "agents",
+  "overdue",
+  "roster",
+  "howto",
+  "manager",
+] as const;
+
 export type { DashboardFilters };
 
 /** Stats strip — same agent/module semantics as `renderOverview`. */
@@ -276,6 +297,7 @@ function renderOverview(
     onViewOverdue: () => void;
     overdueCount: number;
     trendWeeks: TeamTrendWeek[];
+    goToTab: (id: TabId) => void;
   }
 ): ReactNode {
   const agents = filterAgentsList(data, f);
@@ -342,6 +364,59 @@ function renderOverview(
           All caught up! No overdue assignments for the current filters.
         </div>
       )}
+
+      <div
+        className={`what-now-banner${opts.overdueCount > 0 ? " what-now-banner--warn" : ""}`}
+        role="region"
+        aria-label="Suggested next steps"
+      >
+        <span className="what-now-icon" aria-hidden>
+          {opts.overdueCount > 0 ? "📌" : "✨"}
+        </span>
+        <p className="what-now-text">
+          {opts.overdueCount > 0 ? (
+            <>
+              <strong>Suggested next steps:</strong> Check the{" "}
+              <button
+                type="button"
+                className="what-now-link"
+                onClick={() => opts.goToTab("overdue")}
+              >
+                Overdue
+              </button>{" "}
+              tab to see who needs follow-up, then open{" "}
+              <button
+                type="button"
+                className="what-now-link"
+                onClick={() => opts.goToTab("manager")}
+              >
+                Manager View
+              </button>{" "}
+              to see your team&apos;s prioritized action list.
+            </>
+          ) : (
+            <>
+              <strong>Your team is on track!</strong> Check{" "}
+              <button
+                type="button"
+                className="what-now-link"
+                onClick={() => opts.goToTab("modules")}
+              >
+                By Module
+              </button>{" "}
+              for attempt patterns, or open{" "}
+              <button
+                type="button"
+                className="what-now-link"
+                onClick={() => opts.goToTab("manager")}
+              >
+                Manager View
+              </button>{" "}
+              to review individual team performance.
+            </>
+          )}
+        </p>
+      </div>
 
       <div className="overview-grid overview-grid--5">
         <div className="ov-card">
@@ -1204,27 +1279,6 @@ function renderHowTo(): ReactNode {
   );
 }
 
-type TabId =
-  | "overview"
-  | "daily"
-  | "modules"
-  | "agents"
-  | "overdue"
-  | "roster"
-  | "howto"
-  | "manager";
-
-const VALID_TAB_IDS: readonly TabId[] = [
-  "overview",
-  "daily",
-  "modules",
-  "agents",
-  "overdue",
-  "roster",
-  "howto",
-  "manager",
-] as const;
-
 function TabDescRow({ icon, text }: { icon: string; text: string }) {
   return (
     <div className="tab-desc">
@@ -1433,6 +1487,10 @@ export function TrainingDashboard({
     () => new Set()
   );
 
+  const [welcomeOpen, setWelcomeOpen] = useState(false);
+  const [welcomeEntered, setWelcomeEntered] = useState(false);
+  const [welcomeDismissForever, setWelcomeDismissForever] = useState(false);
+
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const setupReportInputRef = useRef<HTMLInputElement>(null);
 
@@ -1555,7 +1613,7 @@ export function TrainingDashboard({
     document.title = data.program_name + " Dashboard";
   }, [data?.program_name]);
 
-  useEffect(() => {
+  const populateFilters = useCallback(() => {
     if (!data) return;
     const keys = collectMonthKeys(data);
     const base = initialPicklistState();
@@ -1572,6 +1630,44 @@ export function TrainingDashboard({
     }
     setPl(base);
   }, [data]);
+
+  const showWelcomeIfNeeded = useCallback(() => {
+    if (readOnly || initialToken) return;
+    if (!data) return;
+    try {
+      if (localStorage.getItem("ggt_welcome_dismissed") === "true") return;
+    } catch {
+      return;
+    }
+    setWelcomeOpen(true);
+  }, [data, readOnly, initialToken]);
+
+  useEffect(() => {
+    if (!data) return;
+    populateFilters();
+    showWelcomeIfNeeded();
+  }, [data, populateFilters, showWelcomeIfNeeded]);
+
+  useEffect(() => {
+    if (!welcomeOpen) {
+      setWelcomeEntered(false);
+      return;
+    }
+    const id = requestAnimationFrame(() => setWelcomeEntered(true));
+    return () => cancelAnimationFrame(id);
+  }, [welcomeOpen]);
+
+  const dismissWelcome = useCallback(() => {
+    if (welcomeDismissForever) {
+      try {
+        localStorage.setItem("ggt_welcome_dismissed", "true");
+      } catch {
+        /* ignore */
+      }
+    }
+    setWelcomeOpen(false);
+    setWelcomeDismissForever(false);
+  }, [welcomeDismissForever]);
 
   useEffect(() => {
     setDailySelectedAgent(null);
@@ -1886,8 +1982,9 @@ export function TrainingDashboard({
       onViewOverdue: goToOverdue,
       overdueCount,
       trendWeeks,
+      goToTab,
     });
-  }, [data, filters, goToOverdue, overdueCount, trendWeeks]);
+  }, [data, filters, goToOverdue, overdueCount, trendWeeks, goToTab]);
 
   const dailyPane = useMemo(() => {
     if (!data) {
@@ -2823,6 +2920,58 @@ export function TrainingDashboard({
       >
         {tooltip?.text}
       </div>
+
+      {!readOnly && !initialToken && welcomeOpen ? (
+        <div
+          className={`welcome-overlay${welcomeEntered ? " welcome-overlay--visible" : ""}`}
+          role="presentation"
+          onClick={dismissWelcome}
+        >
+          <div
+            className="welcome-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="welcome-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="welcome-emoji" aria-hidden>
+              🐷
+            </div>
+            <h2 id="welcome-title" className="welcome-title">
+              Welcome to Gustie Guide!
+            </h2>
+            <ol className="welcome-step-list">
+              <li className="welcome-step">
+                <span className="welcome-step-num">1</span>
+                <span>Upload CSV</span>
+              </li>
+              <li className="welcome-step">
+                <span className="welcome-step-num">2</span>
+                <span>Check Overview</span>
+              </li>
+              <li className="welcome-step">
+                <span className="welcome-step-num">3</span>
+                <span>Open Manager View</span>
+              </li>
+            </ol>
+            <label className="welcome-dismiss-label">
+              <input
+                type="checkbox"
+                checked={welcomeDismissForever}
+                onChange={(e) => setWelcomeDismissForever(e.target.checked)}
+              />{" "}
+              Don&apos;t show this again
+            </label>
+            <button
+              type="button"
+              className="welcome-go-btn"
+              onClick={dismissWelcome}
+            >
+              Let&apos;s go →
+            </button>
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }
