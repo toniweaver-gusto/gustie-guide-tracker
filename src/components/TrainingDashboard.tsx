@@ -268,11 +268,6 @@ function ProgramHeading({ programName }: { programName: string }) {
   );
 }
 
-function formatWeekTickLabel(iso: string): string {
-  const d = new Date(iso + "T12:00:00");
-  return `${d.getMonth() + 1}/${d.getDate()}`;
-}
-
 /** Tab: Overview — mirrors `gustie-guide-dashboard-v2.html` + weekly banner & trend */
 function renderOverview(
   data: ProcessedDashboardData,
@@ -310,11 +305,6 @@ function renderOverview(
   const avgScore = allScores.length
     ? Math.round(allScores.reduce((x, y) => x + y, 0) / allScores.length)
     : null;
-
-  const maxTrend = Math.max(
-    1,
-    ...opts.trendWeeks.map((t) => t.completions)
-  );
 
   if (!modules.length) {
     return (
@@ -388,21 +378,25 @@ function renderOverview(
 
       <div className="section-block team-trend-section">
         <div className="ov-section-title">Team completion trend</div>
-        <p className="team-trend-subtitle">Completions per week (last 10 weeks)</p>
+        <p className="team-trend-subtitle">
+          % of assigned work completed each week (last 10 weeks). Assigned = agents ×
+          modules released that week or earlier.
+        </p>
         <div className="team-trend-chart">
           {opts.trendWeeks.map((t) => (
             <div
               key={t.weekStart}
               className={`team-trend-col${t.isCurrentWeek ? " current-week" : ""}`}
-              title={`${t.weekStart}: ${t.completions} completions`}
+              title={`${t.completions} completed out of ${t.assigned} assigned that week (${t.pct}% completion rate)`}
             >
-              <div
-                className="team-trend-bar"
-                style={{
-                  height: `${Math.max(6, (t.completions / maxTrend) * 100)}%`,
-                }}
-              />
-              <div className="team-trend-label">{formatWeekTickLabel(t.weekStart)}</div>
+              <div className="team-trend-pct-above">{t.pct}%</div>
+              <div className="team-trend-bar-track">
+                <div
+                  className="team-trend-bar"
+                  style={{ height: `${t.pct}%` }}
+                />
+              </div>
+              <div className="team-trend-label">{formatDate(t.weekStart)}</div>
             </div>
           ))}
         </div>

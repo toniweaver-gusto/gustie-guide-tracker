@@ -15,6 +15,10 @@ import {
   type PicklistSelection,
 } from "@/lib/picklistEngine";
 import type { ProcessedDashboardData } from "@/lib/types";
+import {
+  computeTeamCompletionTrend,
+  getLast10WeekStarts,
+} from "@/lib/overviewMetrics";
 import { buildCoachingAlerts } from "@/lib/coachingAlerts";
 import { FilterPicklist } from "@/components/FilterPicklist";
 
@@ -222,33 +226,14 @@ export function ManagerViewPane({
     return { coverage, adherence, overdue, lastActive };
   }, [agents, modules, data, mgrFrom, mgrTo, todayWeek]);
 
-  const weekKeys = useMemo(() => {
-    const set = new Set<string>();
-    agents.forEach((a) => {
-      Object.values(data.agent_modules[a] || {}).forEach((iso) => {
-        if (inIsoRange(iso, mgrFrom, mgrTo)) set.add(getWeekStart(iso));
-      });
-    });
-    return [...set].sort();
-  }, [agents, data.agent_modules, mgrFrom, mgrTo]);
-
   const trend = useMemo(() => {
-    const counts = new Map<string, number>();
-    weekKeys.forEach((w) => counts.set(w, 0));
-    agents.forEach((a) => {
-      Object.values(data.agent_modules[a] || {}).forEach((iso) => {
-        if (!inIsoRange(iso, mgrFrom, mgrTo)) return;
-        const w = getWeekStart(iso);
-        counts.set(w, (counts.get(w) || 0) + 1);
-      });
+    if (!agents.length || !modules.length) return [];
+    const { weekStarts, currentWeekStart } = getLast10WeekStarts();
+    return computeTeamCompletionTrend(weekStarts, data, agents, modules, {
+      currentWeekStart,
+      completionIsoOk: (iso) => inIsoRange(iso, mgrFrom, mgrTo),
     });
-    const max = Math.max(1, ...counts.values());
-    return weekKeys.map((w) => ({
-      w,
-      n: counts.get(w) || 0,
-      pct: Math.round(((counts.get(w) || 0) / max) * 100),
-    }));
-  }, [agents, data.agent_modules, weekKeys, mgrFrom, mgrTo]);
+  }, [agents, modules, data, mgrFrom, mgrTo]);
 
   const heatWeeks = useMemo(() => {
     const set = new Set<string>();
@@ -476,19 +461,30 @@ export function ManagerViewPane({
 
         <div className="mgr-section">
           <div className="mgr-section-title">Completion trend by week</div>
+          <p className="mgr-trend-subtitle">
+            % of assigned work completed each week (last 10 weeks). Assigned = agents ×
+            modules released that week or earlier.
+          </p>
           <div className="mgr-trend-chart">
             {trend.length === 0 ? (
-              <div className="no-data-inline">No weekly completions in scope.</div>
+              <div className="no-data-inline">
+                Add agents and modules in scope to see weekly completion rates.
+              </div>
             ) : (
-              trend.map(({ w, n, pct }) => (
-                <div key={w} className="mgr-trend-col" title={`${w}: ${n}`}>
-                  <div
-                    className="mgr-trend-bar"
-                    style={{ height: `${Math.max(8, pct)}%` }}
-                  />
-                  <div className="mgr-trend-label">
-                    {formatDate(w).slice(0, 6)}
+              trend.map((t) => (
+                <div
+                  key={t.weekStart}
+                  className={`mgr-trend-col${t.isCurrentWeek ? " mgr-trend-col--current" : ""}`}
+                  title={`${t.completions} completed out of ${t.assigned} assigned`}
+                >
+                  <div className="mgr-trend-pct-above">{t.pct}%</div>
+                  <div className="mgr-trend-bar-track">
+                    <div
+                      className="mgr-trend-bar"
+                      style={{ height: `${t.pct}%` }}
+                    />
                   </div>
+                  <div className="mgr-trend-label">{formatDate(t.weekStart)}</div>
                 </div>
               ))
             )}
