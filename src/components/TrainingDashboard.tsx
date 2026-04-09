@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import {
   useCallback,
   useEffect,
@@ -16,12 +16,16 @@ import {
 import type { DashboardFilters } from "@/lib/dashboardFilters";
 import {
   filterAgentsList,
-  filterDatesForViews,
   filterModulesForViews,
 } from "@/lib/dashboardFiltering";
 import { processCSVTexts } from "@/lib/csvParse";
 import { formatDate } from "@/lib/formatDate";
 import { formatMT } from "@/lib/formatMT";
+import {
+  countOverdueAssignments,
+  teamCompletionTrendLast10Weeks,
+  type TeamTrendWeek,
+} from "@/lib/overviewMetrics";
 import {
   LOW_SCORE_THRESHOLD,
   daysSince,
@@ -35,6 +39,8 @@ import {
   formatWeekPeriodLabel,
   type PeriodMode,
 } from "@/lib/periodMode";
+import { DailySplitPane } from "@/components/DailySplitPane";
+import { EmptyState } from "@/components/EmptyState";
 import { ManagerViewPane } from "@/components/ManagerView";
 import {
   normalizeRawScores,
@@ -260,14 +266,20 @@ function ProgramHeading({ programName }: { programName: string }) {
   );
 }
 
-type TooltipSetter = (
-  t: { text: string; x: number; y: number } | null
-) => void;
+function formatWeekTickLabel(iso: string): string {
+  const d = new Date(iso + "T12:00:00");
+  return `${d.getMonth() + 1}/${d.getDate()}`;
+}
 
-/** Tab: Overview — mirrors `renderOverview` from gustie-guide-dashboard-v2.html */
+/** Tab: Overview — mirrors `gustie-guide-dashboard-v2.html` + weekly banner & trend */
 function renderOverview(
   data: ProcessedDashboardData,
-  f: DashboardFilters
+  f: DashboardFilters,
+  opts: {
+    onViewOverdue: () => void;
+    overdueCount: number;
+    trendWeeks: TeamTrendWeek[];
+  }
 ): ReactNode {
   const agents = filterAgentsList(data, f);
   const modules = filterModulesForViews(data, f);
@@ -297,17 +309,49 @@ function renderOverview(
     ? Math.round(allScores.reduce((x, y) => x + y, 0) / allScores.length)
     : null;
 
+  const maxTrend = Math.max(
+    1,
+    ...opts.trendWeeks.map((t) => t.completions)
+  );
+
   if (!modules.length) {
     return (
       <div className="overview-wrap">
-        <div className="no-data">No modules match your filters.</div>
+        <EmptyState icon="🔍" title="No results for current filters">
+          Try adjusting agent, period, module search, or team filters — or load a
+          report that includes more activity.
+        </EmptyState>
       </div>
     );
   }
 
   return (
     <div className="overview-wrap">
-      <div className="overview-grid">
+      {opts.overdueCount > 0 ? (
+        <div
+          className="weekly-action-banner weekly-action-banner--danger"
+          role="status"
+        >
+          <span>
+            <strong>{opts.overdueCount}</strong> overdue assignment
+            {opts.overdueCount !== 1 ? "s" : ""} — modules from previous weeks not
+            yet completed.
+          </span>
+          <button
+            type="button"
+            className="weekly-action-btn"
+            onClick={opts.onViewOverdue}
+          >
+            View Overdue →
+          </button>
+        </div>
+      ) : (
+        <div className="weekly-action-banner weekly-action-banner--ok" role="status">
+          All caught up! No overdue assignments for the current filters.
+        </div>
+      )}
+
+      <div className="overview-grid overview-grid--5">
         <div className="ov-card">
           <div className="ov-card-val" style={{ color: "var(--ink)" }}>
             {totalAssignments.toLocaleString()}
@@ -327,10 +371,38 @@ function renderOverview(
           <div className="ov-card-label">Incomplete</div>
         </div>
         <div className="ov-card">
+          <div className="ov-card-val" style={{ color: "var(--danger)" }}>
+            {opts.overdueCount.toLocaleString()}
+          </div>
+          <div className="ov-card-label">Overdue</div>
+        </div>
+        <div className="ov-card">
           <div className="ov-card-val" style={{ color: "var(--warn)" }}>
             {avgScore !== null ? `${avgScore}%` : "—"}
           </div>
           <div className="ov-card-label">Avg Score</div>
+        </div>
+      </div>
+
+      <div className="section-block team-trend-section">
+        <div className="ov-section-title">Team completion trend</div>
+        <p className="team-trend-subtitle">Completions per week (last 10 weeks)</p>
+        <div className="team-trend-chart">
+          {opts.trendWeeks.map((t) => (
+            <div
+              key={t.weekStart}
+              className={`team-trend-col${t.isCurrentWeek ? " current-week" : ""}`}
+              title={`${t.weekStart}: ${t.completions} completions`}
+            >
+              <div
+                className="team-trend-bar"
+                style={{
+                  height: `${Math.max(6, (t.completions / maxTrend) * 100)}%`,
+                }}
+              />
+              <div className="team-trend-label">{formatWeekTickLabel(t.weekStart)}</div>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -432,114 +504,13 @@ function renderOverview(
   );
 }
 
-/** Tab: Day-over-Day — mirrors `renderDaily` */
-function renderDaily(
-  data: ProcessedDashboardData,
-  f: DashboardFilters,
-  setTooltip: TooltipSetter
-): ReactNode {
-  const agents = filterAgentsList(data, f);
-  const dates = filterDatesForViews(data, f);
+/** Day-over-Day uses `DailySplitPane` in the main component. */
 
-  const byMonth: Record<string, string[]> = {};
-  dates.forEach((d) => {
-    const mk = d.slice(0, 7);
-    if (!byMonth[mk]) byMonth[mk] = [];
-    byMonth[mk].push(d);
-  });
-
-  const blocks: ReactNode[] = [];
-  for (const [mk, mDates] of Object.entries(byMonth)) {
-    const [y, mo] = mk.split("-");
-    const mLabel = new Date(Number(y), Number(mo) - 1).toLocaleString(
-      "default",
-      { month: "long", year: "numeric" }
-    );
-    blocks.push(
-      <div key={mk} className="month-group">
-        <div className="month-label">{mLabel}</div>
-        <table className="daily-table">
-          <thead>
-            <tr>
-              <th style={{ minWidth: 140 }}>Agent</th>
-              {mDates.map((d) => {
-                const dt = new Date(d + "T12:00:00");
-                const dayAbbr = dt
-                  .toLocaleString("default", { weekday: "short" })
-                  .slice(0, 2);
-                const dayNum = dt.getDate();
-                return (
-                  <th key={d} className="date-th" title={d}>
-                    {dayAbbr}
-                    <br />
-                    {dayNum}
-                  </th>
-                );
-              })}
-              <th style={{ textAlign: "right", paddingRight: 4 }}>Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {agents.map((a) => {
-              const daily = data.agent_daily[a] || {};
-              let rowTotal = 0;
-              mDates.forEach((d) => {
-                if (daily[d]) rowTotal += daily[d];
-              });
-              if (!rowTotal && f.agents === null) return null;
-              return (
-                <tr key={a}>
-                  <td className="sticky-agent">
-                    <span className="agent-cell">{a}</span>
-                  </td>
-                  {mDates.map((d) => {
-                    const cnt = daily[d] || 0;
-                    if (cnt) {
-                      const tip = `${a} — ${formatDate(d)}: ${cnt} module${cnt > 1 ? "s" : ""} completed`;
-                      return (
-                        <td key={d} className="day-cell">
-                          <span
-                            className="day-dot has-activity"
-                            onMouseEnter={(e) =>
-                              setTooltip({
-                                text: tip,
-                                x: e.clientX + 12,
-                                y: e.clientY + 12,
-                              })
-                            }
-                            onMouseLeave={() => setTooltip(null)}
-                          >
-                            {cnt}
-                          </span>
-                        </td>
-                      );
-                    }
-                    return (
-                      <td key={d} className="day-cell">
-                        <span className="day-dot no-activity">·</span>
-                      </td>
-                    );
-                  })}
-                  <td className="tot-cell">
-                    {rowTotal > 0 ? rowTotal : "—"}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    );
-  }
-
-  if (!dates.length) {
-    return (
-      <div className="daily-wrap">
-        <div className="no-data">No activity data for the selected filters.</div>
-      </div>
-    );
-  }
-  return <div className="daily-wrap">{blocks}</div>;
+function splitAgentName(full: string): { first: string; last: string } {
+  const parts = full.trim().split(/\s+/);
+  if (parts.length === 0) return { first: "", last: "" };
+  if (parts.length === 1) return { first: parts[0]!, last: "" };
+  return { first: parts[0]!, last: parts.slice(1).join(" ") };
 }
 
 /** Tab: By Module — mirrors `renderModules` */
@@ -552,13 +523,21 @@ function renderModules(
 
   if (!modules.length) {
     return (
-      <div className="no-data">No modules match your filters.</div>
+      <div className="module-wrap">
+        <EmptyState icon="📚" title="No modules match your filters">
+          Clear module search or widen your month / agent scope.
+        </EmptyState>
+      </div>
     );
   }
 
   if (!agents.length) {
     return (
-      <div className="no-data">No agents match your filters.</div>
+      <div className="module-wrap">
+        <EmptyState icon="👤" title="No agents match your filters">
+          Adjust the agent or team picklists to include agents.
+        </EmptyState>
+      </div>
     );
   }
 
@@ -568,11 +547,17 @@ function renderModules(
         Module
       </th>
       <th>Released</th>
-      {agents.map((a) => (
-        <th key={a} title={a}>
-          {a.split(" ")[0]}
-        </th>
-      ))}
+      {agents.map((a) => {
+        const { first, last } = splitAgentName(a);
+        return (
+          <th key={a} title={a} className="module-agent-th">
+            <span className="module-agent-th-first">{first}</span>
+            {last ? (
+              <span className="module-agent-th-last">{last}</span>
+            ) : null}
+          </th>
+        );
+      })}
       <th style={{ textAlign: "right" }}>Coverage</th>
     </tr>
   );
@@ -651,6 +636,16 @@ function renderAgents(
 ): ReactNode {
   const agents = filterAgentsList(data, f);
   const modules = filterModulesForViews(data, f);
+
+  if (!agents.length) {
+    return (
+      <div className="agent-wrap">
+        <EmptyState icon="👤" title="No agents match your filters">
+          Adjust the agent or team picklists, or clear module search.
+        </EmptyState>
+      </div>
+    );
+  }
 
   const today = new Date().toISOString().slice(0, 10);
   const scoreMap = data._raw_scores ?? {};
@@ -827,10 +822,20 @@ function renderAgents(
   );
 }
 
-/** Tab: Overdue — mirrors `renderOverdue` */
+type OverdueRow = {
+  agent: string;
+  mod: string;
+  relDate: string;
+  daysOverdue: number;
+  manager: string;
+};
+
+/** Tab: Overdue — grouped by agent with expand/collapse */
 function renderOverdue(
   data: ProcessedDashboardData,
-  f: DashboardFilters
+  f: DashboardFilters,
+  expanded: Set<string>,
+  toggleOverdueRow: (rowId: string) => void
 ): ReactNode {
   const agents = filterAgentsList(data, f);
   const modules = filterModulesForViews(data, f);
@@ -838,13 +843,7 @@ function renderOverdue(
   const today = new Date().toISOString().slice(0, 10);
   const todayWeek = getWeekStart(today);
 
-  const overdueList: {
-    agent: string;
-    mod: string;
-    relDate: string;
-    daysOverdue: number;
-    manager: string;
-  }[] = [];
+  const overdueList: OverdueRow[] = [];
 
   agents.forEach((a) => {
     modules.forEach((mod) => {
@@ -869,86 +868,109 @@ function renderOverdue(
 
   overdueList.sort((x, y) => y.daysOverdue - x.daysOverdue);
 
+  const byAgent = new Map<string, OverdueRow[]>();
+  overdueList.forEach((row) => {
+    const list = byAgent.get(row.agent) ?? [];
+    list.push(row);
+    byAgent.set(row.agent, list);
+  });
+
+  const agentOrder = [...byAgent.keys()].sort((a, b) => {
+    const maxA = Math.max(...(byAgent.get(a) ?? []).map((r) => r.daysOverdue));
+    const maxB = Math.max(...(byAgent.get(b) ?? []).map((r) => r.daysOverdue));
+    return maxB - maxA;
+  });
+
   return (
-    <div className="overview-wrap">
+    <div className="overview-wrap overdue-grouped-wrap">
       {!overdueList.length ? (
-        <div
-          style={{
-            padding: 40,
-            textAlign: "center",
-            color: "var(--kale)",
-            fontSize: "0.85rem",
-            fontWeight: 600,
-          }}
-        >
+        <div className="weekly-action-banner weekly-action-banner--ok" role="status">
           ✓ No overdue trainings for the current filters.
         </div>
       ) : (
         <>
-          <div
-            style={{
-              marginBottom: 16,
-              fontSize: "0.78rem",
-              color: "var(--muted)",
-            }}
-          >
+          <div className="overdue-intro">
             Showing{" "}
             <strong style={{ color: "var(--danger)" }}>
               {overdueList.length}
             </strong>{" "}
             overdue assignment
-            {overdueList.length !== 1 ? "s" : ""} — modules from previous
-            weeks not yet completed.
+            {overdueList.length !== 1 ? "s" : ""} — modules from previous weeks
+            not yet completed.
           </div>
-          <table className="ov-table">
-            <thead>
-              <tr>
-                <th>Agent</th>
-                <th>Manager</th>
-                <th>Module</th>
-                <th>Released</th>
-                <th>Days Overdue</th>
-              </tr>
-            </thead>
-            <tbody>
-              {overdueList.map((row) => (
-                <tr key={`${row.agent}-${row.mod}`}>
-                  <td className="agent-name-cell">{row.agent}</td>
-                  <td
-                    style={{
-                      fontSize: "0.68rem",
-                      color: "var(--muted)",
-                    }}
+          <div className="overdue-agent-groups">
+            {agentOrder.map((agent) => {
+              const rows = byAgent.get(agent) ?? [];
+              const rowId = agent;
+              const open = expanded.has(rowId);
+              const maxDays = Math.max(...rows.map((r) => r.daysOverdue));
+              return (
+                <div key={agent} className="overdue-agent-block">
+                  <button
+                    type="button"
+                    className="overdue-agent-header"
+                    onClick={() => toggleOverdueRow(rowId)}
+                    aria-expanded={open}
                   >
-                    {row.manager}
-                  </td>
-                  <td
-                    style={{
-                      maxWidth: 240,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                    title={row.mod}
-                  >
-                    {row.mod}
-                  </td>
-                  <td
-                    style={{
-                      fontFamily: "'DM Mono',monospace",
-                      fontSize: "0.62rem",
-                      color: "var(--muted)",
-                    }}
-                  >
-                    {row.relDate}
-                  </td>
-                  <td>
-                    <span className="urgency-days">{row.daysOverdue}d</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    <span className="overdue-chevron" aria-hidden>
+                      {open ? "▼" : "▶"}
+                    </span>
+                    <span className="overdue-agent-name">{agent}</span>
+                    <span className="overdue-agent-meta">
+                      {rows.length} module{rows.length !== 1 ? "s" : ""} · max{" "}
+                      <span className="urgency-days">{maxDays}d</span>
+                    </span>
+                  </button>
+                  {open ? (
+                    <table className="ov-table overdue-detail-table">
+                      <thead>
+                        <tr>
+                          <th>Manager</th>
+                          <th>Module</th>
+                          <th>Released</th>
+                          <th>Days Overdue</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.map((row) => (
+                          <tr key={`${row.agent}-${row.mod}`}>
+                            <td
+                              style={{
+                                fontSize: "0.68rem",
+                                color: "var(--muted)",
+                              }}
+                            >
+                              {row.manager}
+                            </td>
+                            <td
+                              className="mod-ellipsis"
+                              title={row.mod}
+                            >
+                              {row.mod}
+                            </td>
+                            <td
+                              style={{
+                                fontFamily: "'DM Mono',monospace",
+                                fontSize: "0.62rem",
+                                color: "var(--muted)",
+                              }}
+                            >
+                              {row.relDate}
+                            </td>
+                            <td>
+                              <span className="urgency-days">
+                                {row.daysOverdue}d
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
         </>
       )}
     </div>
@@ -1155,6 +1177,31 @@ function TabDescRow({ icon, text }: { icon: string; text: string }) {
   );
 }
 
+function TabDescRowWithExport({
+  icon,
+  text,
+  exportType: tabExportType,
+  onExport,
+}: {
+  icon: string;
+  text: string;
+  exportType: ExportType;
+  onExport: (type: ExportType) => void;
+}) {
+  return (
+    <div className="tab-desc-with-export">
+      <TabDescRow icon={icon} text={text} />
+      <button
+        type="button"
+        className="tab-inline-export"
+        onClick={() => onExport(tabExportType)}
+      >
+        ⬇ Export
+      </button>
+    </div>
+  );
+}
+
 const TAB_DESC: Record<
   TabId,
   { icon: string; text: string }
@@ -1265,6 +1312,22 @@ export function TrainingDashboard({
       /* ignore */
     }
   }, []);
+
+  const goToOverdue = useCallback(() => switchTab("overdue"), [switchTab]);
+  const goToTab = useCallback((id: TabId) => switchTab(id), [switchTab]);
+  const runTabExport = useCallback((type: ExportType) => {
+    setExportType(type);
+    setExportOpen(true);
+  }, []);
+  const toggleOverdueRow = useCallback((rowId: string) => {
+    setOverdueExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(rowId)) next.delete(rowId);
+      else next.add(rowId);
+      return next;
+    });
+  }, []);
+
   /** Picklist engine: open/search/selected per filter id */
   const [_pl, setPl] = useState(() => initialPicklistState());
   const [periodMode, setPeriodMode] = useState<PeriodMode>("month");
@@ -1274,6 +1337,18 @@ export function TrainingDashboard({
 
   const [tooltip, setTooltip] = useState<TooltipState>(null);
   const [saving, setSaving] = useState(false);
+
+  const [dailySelectedAgent, setDailySelectedAgent] = useState<string | null>(
+    null
+  );
+  const [dailySearch, setDailySearch] = useState("");
+  const [slideout, setSlideout] = useState<{
+    agent: string;
+    date: string;
+  } | null>(null);
+  const [overdueExpanded, setOverdueExpanded] = useState<Set<string>>(
+    () => new Set()
+  );
 
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const setupReportInputRef = useRef<HTMLInputElement>(null);
@@ -1399,8 +1474,30 @@ export function TrainingDashboard({
 
   useEffect(() => {
     if (!data) return;
-    setPl(initialPicklistState());
+    const keys = collectMonthKeys(data);
+    const now = new Date();
+    const label = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const base = initialPicklistState();
+    if (keys.includes(label)) {
+      base.month = { ...base.month, selected: [label] };
+    }
+    setPl(base);
   }, [data]);
+
+  useEffect(() => {
+    setDailySelectedAgent(null);
+    setDailySearch("");
+    setOverdueExpanded(new Set());
+  }, [data?.program_name]);
+
+  useEffect(() => {
+    if (!slideout) return;
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSlideout(null);
+    };
+    window.addEventListener("keydown", onEsc);
+    return () => window.removeEventListener("keydown", onEsc);
+  }, [slideout]);
 
   useEffect(() => {
     setPl((p) => ({
@@ -1663,14 +1760,46 @@ export function TrainingDashboard({
     return computeFilteredStatsStrip(data, filters);
   }, [data, filters]);
 
+  const overdueCount = useMemo(
+    () => (data ? countOverdueAssignments(data, filters) : 0),
+    [data, filters]
+  );
+
+  const trendWeeks = useMemo(
+    () => (data ? teamCompletionTrendLast10Weeks(data, filters) : []),
+    [data, filters]
+  );
+
+  const slideoutModules = useMemo(() => {
+    if (!slideout || !data) return [];
+    const mods = filterModulesForViews(data, filters);
+    return mods
+      .filter((m) => data.agent_modules[slideout.agent]?.[m] === slideout.date)
+      .map((m) => ({
+        mod: m,
+        score: data._raw_scores?.[slideout.agent]?.[m],
+      }));
+  }, [slideout, data, filters]);
+
+  const handleSlideoutClick = useCallback(
+    (e: ReactMouseEvent<HTMLDivElement>) => {
+      if (e.target === e.currentTarget) setSlideout(null);
+    },
+    []
+  );
+
   const overviewPane = useMemo(() => {
     if (!data) {
       return (
         <div className="no-data">Upload a report to see overview.</div>
       );
     }
-    return renderOverview(data, filters);
-  }, [data, filters]);
+    return renderOverview(data, filters, {
+      onViewOverdue: goToOverdue,
+      overdueCount,
+      trendWeeks,
+    });
+  }, [data, filters, goToOverdue, overdueCount, trendWeeks]);
 
   const dailyPane = useMemo(() => {
     if (!data) {
@@ -1678,8 +1807,18 @@ export function TrainingDashboard({
         <div className="no-data">Upload a report to see day-over-day.</div>
       );
     }
-    return renderDaily(data, filters, setTooltip);
-  }, [data, filters]);
+    return (
+      <DailySplitPane
+        data={data}
+        filters={filters}
+        dailySelectedAgent={dailySelectedAgent}
+        onSelectDailyAgent={setDailySelectedAgent}
+        dailySearch={dailySearch}
+        onDailySearchChange={setDailySearch}
+        onDayCellClick={(agent, date) => setSlideout({ agent, date })}
+      />
+    );
+  }, [data, filters, dailySelectedAgent, dailySearch]);
 
   const modulesPane = useMemo(() => {
     if (!data) {
@@ -1705,8 +1844,8 @@ export function TrainingDashboard({
         <div className="no-data">Upload a report to see overdue trainings.</div>
       );
     }
-    return renderOverdue(data, filters);
-  }, [data, filters]);
+    return renderOverdue(data, filters, overdueExpanded, toggleOverdueRow);
+  }, [data, filters, overdueExpanded, toggleOverdueRow]);
 
   const howtoPane = useMemo(() => renderHowTo(), []);
 
@@ -2431,7 +2570,11 @@ export function TrainingDashboard({
           className={`tab-pane${activeTab === "overview" ? " active" : ""}`}
           id="pane-overview"
         >
-          <TabDescRow {...TAB_DESC.overview} />
+          <TabDescRowWithExport
+            {...TAB_DESC.overview}
+            exportType="modules"
+            onExport={runTabExport}
+          />
           {overviewPane}
         </div>
         <div
@@ -2452,14 +2595,22 @@ export function TrainingDashboard({
           className={`tab-pane${activeTab === "agents" ? " active" : ""}`}
           id="pane-agents"
         >
-          <TabDescRow {...TAB_DESC.agents} />
+          <TabDescRowWithExport
+            {...TAB_DESC.agents}
+            exportType="daily"
+            onExport={runTabExport}
+          />
           {agentsPane}
         </div>
         <div
           className={`tab-pane${activeTab === "overdue" ? " active" : ""}`}
           id="pane-overdue"
         >
-          <TabDescRow {...TAB_DESC.overdue} />
+          <TabDescRowWithExport
+            {...TAB_DESC.overdue}
+            exportType="log"
+            onExport={runTabExport}
+          />
           {overduePane}
         </div>
         <div
@@ -2511,6 +2662,70 @@ export function TrainingDashboard({
           {managerPane}
         </div>
       </div>
+
+      {slideout && data ? (
+        <div
+          className="slideout-overlay"
+          role="presentation"
+          onClick={handleSlideoutClick}
+        >
+          <aside
+            className="slideout-panel"
+            role="dialog"
+            aria-label="Day detail"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="slideout-panel-head">
+              <div>
+                <div className="slideout-panel-date">
+                  {formatDate(slideout.date)}
+                </div>
+                <div className="slideout-panel-agent">{slideout.agent}</div>
+              </div>
+              <button
+                type="button"
+                className="slideout-close"
+                aria-label="Close"
+                onClick={() => setSlideout(null)}
+              >
+                ✕
+              </button>
+            </div>
+            {slideoutModules.length === 0 ? (
+              <p className="slideout-empty">No module completions recorded for this day.</p>
+            ) : (
+              <ul className="slideout-list">
+                {slideoutModules.map(({ mod, score }) => (
+                  <li key={mod} className="slideout-item">
+                    <span className="slideout-mod" title={mod}>
+                      {mod}
+                    </span>
+                    <span
+                      className={`score-pill slideout-score ${
+                        score !== undefined ? scorePillClass(score) : "na"
+                      }`}
+                    >
+                      {score !== undefined ? `${score}%` : "—"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="slideout-footer">
+              <button
+                type="button"
+                className="slideout-link-tab"
+                onClick={() => {
+                  setSlideout(null);
+                  goToTab("agents");
+                }}
+              >
+                Open Agent Summary tab
+              </button>
+            </div>
+          </aside>
+        </div>
+      ) : null}
 
       <div
         className={`tooltip-box${tooltip ? " visible" : ""}`}

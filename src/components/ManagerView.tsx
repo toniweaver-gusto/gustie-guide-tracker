@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import { useCallback, useMemo, useState } from "react";
+import type { ChangeEvent, ReactNode } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { addDays } from "@/lib/periodMode";
 import type { DashboardFilters } from "@/lib/dashboardFilters";
 import {
@@ -29,6 +29,51 @@ function inIsoRange(iso: string, from: string, to: string): boolean {
   return true;
 }
 
+function normAgentKey(name: string): string {
+  return name.toLowerCase().trim();
+}
+
+/** Minimal CSV row split (handles quoted fields). */
+function splitCsvLine(line: string): string[] {
+  const out: string[] = [];
+  let cur = "";
+  let q = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i]!;
+    if (c === '"') {
+      q = !q;
+      continue;
+    }
+    if (c === "," && !q) {
+      out.push(cur.trim());
+      cur = "";
+      continue;
+    }
+    cur += c;
+  }
+  out.push(cur.trim());
+  return out;
+}
+
+function parseLeadRosterCsv(text: string): Map<string, string> {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim());
+  if (lines.length < 2) return new Map();
+  const header = splitCsvLine(lines[0]!).map((c) =>
+    c.replace(/^"|"$/g, "").trim()
+  );
+  const ai = header.findIndex((h) => h.toLowerCase() === "agent name");
+  const li = header.findIndex((h) => h.toLowerCase() === "lead name");
+  if (ai < 0 || li < 0) return new Map();
+  const map = new Map<string, string>();
+  for (let i = 1; i < lines.length; i++) {
+    const row = splitCsvLine(lines[i]!);
+    const agent = row[ai]?.replace(/^"|"$/g, "").trim() ?? "";
+    const lead = row[li]?.replace(/^"|"$/g, "").trim() ?? "";
+    if (agent) map.set(normAgentKey(agent), lead || "—");
+  }
+  return map;
+}
+
 export function ManagerViewPane({
   data,
   filters,
@@ -43,6 +88,11 @@ export function ManagerViewPane({
   });
   const [mgrFrom, setMgrFrom] = useState("");
   const [mgrTo, setMgrTo] = useState("");
+  const [leadRoster, setLeadRoster] = useState<Map<string, string> | null>(
+    null
+  );
+  const [selectedLead, setSelectedLead] = useState<string | null>(null);
+  const leadFileRef = useRef<HTMLInputElement>(null);
 
   const peAll = useMemo(() => [...data.pe_names].sort(), [data.pe_names]);
 
@@ -51,7 +101,7 @@ export function ManagerViewPane({
     [data, filters]
   );
 
-  const agents = useMemo(() => {
+  const agentsAfterPe = useMemo(() => {
     const sel = mgrSlice.selected;
     if (sel === null) return agentsTop;
     if (sel.length === 0) return [];
@@ -59,6 +109,53 @@ export function ManagerViewPane({
       sel.includes(data.agent_pe[a] || "—")
     );
   }, [agentsTop, mgrSlice.selected, data.agent_pe]);
+
+  const agents = useMemo(() => {
+    if (!leadRoster || selectedLead === null) return agentsAfterPe;
+    return agentsAfterPe.filter((a) => {
+      const lead = leadRoster.get(normAgentKey(a));
+      return lead === selectedLead;
+    });
+  }, [agentsAfterPe, leadRoster, selectedLead]);
+
+  const leadNames = useMemo(() => {
+    if (!leadRoster) return [];
+    return [...new Set(leadRoster.values())].sort((a, b) =>
+      a.localeCompare(b)
+    );
+  }, [leadRoster]);
+
+  const loadLeadRoster = useCallback(
+    (e: ChangeEvent<HTMLInputElement>) => {
+      const f = e.target.files?.[0];
+      if (!f) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const text = String(reader.result ?? "");
+        const map = parseLeadRosterCsv(text);
+        setLeadRoster(map.size ? map : null);
+        setSelectedLead(null);
+        if (!map.size) {
+          alert(
+            'Could not parse roster. Expected header row with columns "Agent Name" and "Lead Name".'
+          );
+        }
+      };
+      reader.readAsText(f);
+      e.target.value = "";
+    },
+    []
+  );
+
+  const filterByLead = useCallback((lead: string | null) => {
+    setSelectedLead(lead);
+  }, []);
+
+  const clearLeadRoster = useCallback(() => {
+    setLeadRoster(null);
+    setSelectedLead(null);
+    if (leadFileRef.current) leadFileRef.current.value = "";
+  }, []);
 
   const modulesBase = useMemo(
     () => filterModulesForViews(data, filters),
@@ -302,6 +399,51 @@ export function ManagerViewPane({
           >
             Clear
           </button>
+          <div className="filter-sep" />
+          <input
+            ref={leadFileRef}
+            type="file"
+            accept=".csv,text/csv"
+            className="mgr-lead-file-input"
+            onChange={loadLeadRoster}
+            aria-label="Upload lead roster CSV"
+          />
+          <button
+            type="button"
+            className="mgr-lead-upload-btn"
+            onClick={() => leadFileRef.current?.click()}
+          >
+            Lead roster (CSV)
+          </button>
+          {leadRoster && leadRoster.size > 0 ? (
+            <>
+              <label className="mgr-lead-label" htmlFor="mgr-lead-select">
+                Lead
+              </label>
+              <select
+                id="mgr-lead-select"
+                className="mgr-lead-select"
+                value={selectedLead ?? ""}
+                onChange={(e) =>
+                  filterByLead(e.target.value ? e.target.value : null)
+                }
+              >
+                <option value="">All leads</option>
+                {leadNames.map((ln) => (
+                  <option key={ln} value={ln}>
+                    {ln}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="mgr-lead-clear"
+                onClick={clearLeadRoster}
+              >
+                Clear roster
+              </button>
+            </>
+          ) : null}
         </div>
 
         <div className="mgr-kpi-grid">
