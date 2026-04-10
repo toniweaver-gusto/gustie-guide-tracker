@@ -18,7 +18,7 @@ import {
   filterAgentsList,
   filterModulesForViews,
 } from "@/lib/dashboardFiltering";
-import { processCSVTexts } from "@/lib/csvParse";
+import { processCSVTexts, validateUplimitCsvText } from "@/lib/csvParse";
 import { formatDate, formatWeekOfLabel } from "@/lib/formatDate";
 import { formatMT } from "@/lib/formatMT";
 import {
@@ -1426,6 +1426,8 @@ export function TrainingDashboard({
 
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadDrag, setUploadDrag] = useState(false);
+  const [uploadCsvError, setUploadCsvError] = useState<string | null>(null);
+  const [setupCsvError, setSetupCsvError] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [exportType, setExportType] = useState<ExportType>("daily");
 
@@ -1763,15 +1765,10 @@ export function TrainingDashboard({
   );
 
   const processAndApply = useCallback(
-    async (texts: string[], programName: string) => {
+    async (texts: string[], programName: string): Promise<boolean> => {
       const d = processCSVTexts(texts, programName);
       if (!d) {
-        alert(
-          "No data could be loaded from that file.\n\n" +
-            "Use a comma-separated CSV with these columns: Full Name (or FULL_NAME), Content Week Name, Latest Submission Time; optional PE Name, GROUP_NAME, and Total Points.\n\n" +
-            "If you exported from Excel, use “CSV UTF-8”. A UTF-8 BOM at the start of the file is fine."
-        );
-        return;
+        return false;
       }
       const cleaned = sanitizeProcessedDataForPostgres({
         ...d,
@@ -1779,22 +1776,39 @@ export function TrainingDashboard({
       });
       setData(cleaned);
       if (!readOnly) await saveSnapshot(cleaned);
+      return true;
     },
     [readOnly, saveSnapshot]
   );
 
   const launchDashboard = async () => {
     if (!setupTexts.length) return;
+    setSetupCsvError(null);
+    for (const text of setupTexts) {
+      const v = validateUplimitCsvText(text);
+      if (!v.ok) {
+        setSetupCsvError(
+          `This doesn't look like an Uplimit export. Missing required columns: ${v.missing.join(", ")}. Please download the Assessment Performance Report CSV from Uplimit.`
+        );
+        return;
+      }
+    }
     const name =
       setupProgramName.trim() ||
       workspace?.team_name ||
       "Training Dashboard";
-    await processAndApply(setupTexts, name);
+    const ok = await processAndApply(setupTexts, name);
+    if (!ok) {
+      setSetupCsvError(
+        "No data could be loaded from that file. Check that the CSV has data rows and uses UTF-8."
+      );
+    }
   };
 
   const onSetupFiles = async (files: File[]) => {
     if (!files.length) return;
     const texts = await readFilesAsText(files);
+    setSetupCsvError(null);
     setSetupTexts(texts);
     setSetupLoadedLabel(
       `✓ ${files.length} file${files.length > 1 ? "s" : ""} loaded: ${files.map((f) => f.name).join(", ")}`
@@ -1815,8 +1829,25 @@ export function TrainingDashboard({
     const list = arr.filter((f) => f.name.toLowerCase().endsWith(".csv"));
     if (!list.length) return;
     const texts = await readFilesAsText(list);
+    for (const text of texts) {
+      const v = validateUplimitCsvText(text);
+      if (!v.ok) {
+        setUploadCsvError(
+          `This doesn't look like an Uplimit export. Missing required columns: ${v.missing.join(", ")}. Please download the Assessment Performance Report CSV from Uplimit.`
+        );
+        return;
+      }
+    }
+    setUploadCsvError(null);
     const programName = data?.program_name ?? "Training Dashboard";
-    await processAndApply(texts, programName);
+    const ok = await processAndApply(texts, programName);
+    if (ok) {
+      setUploadOpen(false);
+    } else {
+      setUploadCsvError(
+        "No data could be loaded from that file. Check that the CSV has data rows and uses UTF-8."
+      );
+    }
   };
 
   const periodKeys = useMemo(() => {
@@ -2340,17 +2371,20 @@ export function TrainingDashboard({
                   <strong>Click to upload</strong> or drag CSV files here
                 </div>
                 <div className="setup-drop-sub">
-                  Full Name, Content Week Name, Latest Submission Time, PE Name,
-                  GROUP_NAME, Total Points
+                  Required: FULL_NAME · CONTENT_WEEK_NAME ·
+                  LATEST_SUBMISSION_TIME · TOTAL_POINTS
                 </div>
               </div>
               <p className="setup-hint">
-                Expected columns include <code>Full Name</code> (or{" "}
-                <code>FULL_NAME</code>), <code>Content Week Name</code>,{" "}
-                <code>Latest Submission Time</code>; optional{" "}
-                <code>PE_NAME</code>, <code>GROUP_NAME</code>,{" "}
-                <code>Total Points</code>. Use CSV UTF-8 from Excel if applicable.
+                Required columns: FULL_NAME · CONTENT_WEEK_NAME ·
+                LATEST_SUBMISSION_TIME · TOTAL_POINTS. Optional: PE_NAME,
+                GROUP_NAME, attempts. Use CSV UTF-8 from Excel if applicable.
               </p>
+              {setupCsvError ? (
+                <p className="upload-csv-error setup-csv-error" role="alert">
+                  {setupCsvError}
+                </p>
+              ) : null}
               <input
                 ref={setupReportInputRef}
                 type="file"
@@ -2403,6 +2437,15 @@ export function TrainingDashboard({
             Upload one or two Uplimit CSV exports. Multiple files are combined
             automatically. The dashboard will refresh instantly.
           </p>
+          <p className="upload-required-hint">
+            Required columns: FULL_NAME · CONTENT_WEEK_NAME ·
+            LATEST_SUBMISSION_TIME · TOTAL_POINTS
+          </p>
+          {uploadCsvError ? (
+            <p className="upload-csv-error" role="alert">
+              {uploadCsvError}
+            </p>
+          ) : null}
           <div
             className={`drop-zone${uploadDrag ? " drag-over" : ""}`}
             onClick={() => uploadInputRef.current?.click()}
@@ -2417,9 +2460,7 @@ export function TrainingDashboard({
               const csvs = Array.from(e.dataTransfer.files).filter((f) =>
                 f.name.toLowerCase().endsWith(".csv")
               );
-              if (csvs.length) {
-                void onUploadFiles(csvs).then(() => setUploadOpen(false));
-              }
+              if (csvs.length) void onUploadFiles(csvs);
             }}
             role="presentation"
           >
@@ -2432,16 +2473,20 @@ export function TrainingDashboard({
             multiple
             style={{ display: "none" }}
             onChange={(e) => {
-              void onUploadFiles(e.target.files);
-              setUploadOpen(false);
-              e.target.value = "";
+              void (async () => {
+                await onUploadFiles(e.target.files);
+                e.target.value = "";
+              })();
             }}
           />
           <div className="modal-footer">
             <button
               type="button"
               className="modal-cancel"
-              onClick={() => setUploadOpen(false)}
+              onClick={() => {
+                setUploadCsvError(null);
+                setUploadOpen(false);
+              }}
             >
               Cancel
             </button>
@@ -2634,7 +2679,10 @@ export function TrainingDashboard({
               <button
                 type="button"
                 className="upload-btn"
-                onClick={() => setUploadOpen(true)}
+                onClick={() => {
+                  setUploadCsvError(null);
+                  setUploadOpen(true);
+                }}
               >
                 Load New Report
               </button>

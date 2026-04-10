@@ -105,6 +105,43 @@ export function splitCsvFileIntoLineStrings(text: string): string[] {
   return lines.filter((l) => l.trim().length > 0);
 }
 
+/** Normalized header keys and labels shown when validation fails. */
+const UPLIMIT_REQUIRED_COLUMNS: { normKey: string; label: string }[] = [
+  { normKey: "full name", label: "FULL_NAME" },
+  { normKey: "content week name", label: "CONTENT_WEEK_NAME" },
+  { normKey: "latest submission time", label: "LATEST_SUBMISSION_TIME" },
+  { normKey: "total points", label: "TOTAL_POINTS" },
+];
+
+/** Returns uppercase labels (e.g. FULL_NAME) for any required Uplimit columns not present in the header row. */
+export function getMissingUplimitRequiredColumns(headers: string[]): string[] {
+  const norm = headers.map((h) => normalizeHeader(h));
+  const missing: string[] = [];
+  for (const { normKey, label } of UPLIMIT_REQUIRED_COLUMNS) {
+    if (norm.indexOf(normKey) < 0) missing.push(label);
+  }
+  return missing;
+}
+
+/**
+ * Validates the first row of a CSV as headers (Uplimit Assessment Performance Report shape).
+ */
+export function validateUplimitCsvText(
+  text: string
+): { ok: true } | { ok: false; missing: string[] } {
+  const lines = splitCsvFileIntoLineStrings(text);
+  if (lines.length < 1) {
+    return {
+      ok: false,
+      missing: UPLIMIT_REQUIRED_COLUMNS.map((r) => r.label),
+    };
+  }
+  const headers = splitCSVLine(lines[0]!);
+  const missing = getMissingUplimitRequiredColumns(headers);
+  if (missing.length) return { ok: false, missing };
+  return { ok: true };
+}
+
 type ColumnIndices = {
   fullName: number;
   contentWeek: number;
@@ -127,6 +164,7 @@ function resolveColumnIndices(headers: string[]): ColumnIndices | null {
   if (fullName < 0 || contentWeek < 0 || latestSub < 0) return null;
   const peName = want("pe name");
   const totalPoints = want("total points");
+  if (totalPoints < 0) return null;
   const groupName = want("group name");
   let attempts = want("attempts");
   if (attempts < 0) attempts = want("# attempts");

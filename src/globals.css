@@ -1154,6 +1154,27 @@ header h1 span { color: var(--kale); }
   font-size: 1.2rem; font-weight: 700; margin-bottom: 8px; color: var(--ink);
 }
 .upload-modal p { font-size: 0.73rem; color: var(--muted); margin-bottom: 20px; line-height: 1.6; }
+.upload-required-hint {
+  font-family: var(--font-dm-mono), 'DM Mono', monospace;
+  font-size: 0.62rem;
+  color: var(--muted);
+  margin: -6px 0 14px;
+  line-height: 1.45;
+}
+.upload-csv-error {
+  color: #b91c1c;
+  background: var(--danger-dim);
+  border: 1px solid rgba(192, 57, 43, 0.28);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  margin: 0 0 14px;
+}
+.setup-csv-error {
+  margin-top: 10px;
+  margin-bottom: 0;
+}
 .drop-zone {
   border: 2px dashed var(--border); border-radius: 8px; padding: 30px;
   text-align: center; cursor: pointer; transition: border-color 0.2s, background 0.2s;
@@ -1810,7 +1831,7 @@ input[type="file"] { display: none; }
   font-size: 0.82rem;
   color: var(--muted);
   line-height: 1.5;
-  max-width: 36rem;
+  max-width: 44rem;
 }
 .landing-main {
   max-width: 1100px;

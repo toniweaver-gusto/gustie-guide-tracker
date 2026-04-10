@@ -157,7 +157,7 @@ export function TeamLandingPage() {
         <input
           type="text"
           className="landing-create-input"
-          placeholder="e.g. TaskUs Payroll, TP Benefits..."
+          placeholder="e.g. TaskUs Payroll, CX Foundations, Toni Weaver..."
           value={createName}
           onChange={(e) => setCreateName(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && void onCreateTeam()}
@@ -223,7 +223,10 @@ export function TeamLandingPage() {
           <div>
             <h1 className="landing-title">Gustie Guide Dashboard</h1>
             <p className="landing-subtitle">
-              Select your team to view your dashboard or create a new one
+              Select your team workspace below, or create a new one. Use a
+              clear, consistent team name so your team can find it easily — e.g.
+              your vendor name, program name, or your own name if you manage a
+              specific group.
             </p>
           </div>
         </div>
